@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+	<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
+	<link rel="icon" type="image/png" href="https://konskall-ai.github.io/alieninvaders/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="https://konskall-ai.github.io/alieninvaders/favicon.svg" />
+    <link rel="shortcut icon" href="https://konskall-ai.github.io/alieninvaders/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="https://konskall-ai.github.io/alieninvaders/apple-touch-icon.png" />
+    <link rel="manifest" href="https://konskall-ai.github.io/alieninvaders/site.webmanifest" />
+	<!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://konskall-ai.github.io/alieninvaders/index.html">
+    <meta property="og:title" content="Alien Invaders - Space War">
+    <meta property="og:description" content="Challenge yourself in this intense space shooter! Defeat alien invaders and reach the top scores.">
+    <meta property="og:image" content="https://konskall-ai.github.io/alieninvaders/og-alien.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://konskall-ai.github.io/alieninvaders/index.html">
+    <meta property="twitter:title" content="Alien Invaders - Space War">
+    <meta property="twitter:description" content="Challenge yourself in this intense space shooter!">
+    <meta property="twitter:image" content="https://konskall-ai.github.io/alieninvaders/og-alien.png">
+   <!-- Apple specific -->
+    <meta name="apple-mobile-web-app-title" content="Alien Invaders">
+    <title>Alien Invaders - Space War</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Credits Splash Screen -->
+        <div id="credits-screen" class="screen">
+            <div class="screen-content credits-splash">
+			<p class="credits-subtitle">Υπερασπίσου τον Γαλαξία απο τους Εξωγήινους Εισβολείς 👽</p>
+                <div class="credits-creator">
+                    <p class="creator-name-large">Alien Invaders</p>
+                </div>
+                <p class="created-by">Created by</p>
+                <h1 class="credits-title">KonsKall</h1>
+                <p class="created-by">for my little boy</p>
+            </div>
+        </div>
+<!-- Story Screen -->
+<div id="story-screen" class="screen hidden">
+    <div class="screen-content story-content">
+        <button class="story-close-btn" id="story-close-btn">✕</button>
+        
+        <h1 class="story-title">Ο Κύκλος του Κενού</h1>
+        
+        <div class="story-body">
+            <h2>Η Εισβολή</h2>
+            
+            <p>
+                Το 2047, το <strong>Xenophage Collective</strong>—μια αρχαία κοσμική αυτοκρατορία— 
+                αφυπνίστηκε. Η πρώτη μας εκπομπή προς τα άστρα... ήταν το σήμα της αφύπνισής τους.  
+            </p>
+            
+            <p>
+                Ο εχθρός ερχόταν κατά κύματα <strong>Scout Drones</strong>, ύστερα τα <strong>Fighter Wasps</strong>.  
+                Πόλεις κάηκαν. Έθνη κατέρρευσαν. Η ανθρωπότητα ενοποιήθηκε.  
+            </p>
+
+            <h2>Ο Πόλεμος</h2>
+            
+            <p>
+                Οι ουρανοί γέμισαν με <strong>Alien Leviathans</strong>— 
+                πλάσματα φτιαγμένα από καθαρή κοσμική ενέργεια.  
+            </p>
+
+            <p>
+                Και μετά ήρθαν εκείνοι... τα <strong>Void Entities</strong>.  
+                Όντα που αψηφούν τη πραγματικότητα. 
+            </p>
+
+            <h2>Η Αντεπίθεση</h2>
+
+            <p>
+                Διαστημόπλοια με χρωμιωμένο περίβλημα, 
+                οπλισμένα με την πιο προηγμένη τεχνολογία που γνώρισε ποτέ η ανθρωπότητα.
+                Κάθε νίκη, μια αναπνοή ελπίδας.
+            </p>
+
+            <h2>Σήμερα</h2>
+            
+            <p>
+                Έτος 2030.  
+                Δεν νικήσαμε τον εχθρό... αλλά σταθήκαμε όρθιοι. Μια εύθραυστη <strong>Στρατηγική Ισοδυναμία</strong>.  
+            </p>
+
+            <p>
+                Ο πόλεμος συνεχίζεται. <a href="#" onclick="document.getElementById('story-screen').classList.add('hidden'); document.getElementById('start-screen').classList.add('hidden'); game.startGame(); return false;" class="story-play-link">
+        Ξεκινήστε την Μάχη.
+    </a>   
+            </p>
+        </div>
+
+        <div class="story-actions">
+            <button class="btn btn--primary btn--lg" id="story-start-btn">Ξεκινήστε την Αποστολή</button>
+        </div>
+    </div>
+</div>
+        <!-- Settings Screen -->
+        <div id="settings-screen" class="screen hidden">
+            <div class="screen-content">
+                <h1>⚙️ Ρυθμίσεις</h1>
+                <p class="subtitle">Προσάρμοσε το Παιχνίδι</p>
+                <div class="settings-form">
+                    <div class="form-group">
+                        <label class="form-label">Βαθμός Δυσκολίας:</label>
+                        <select id="difficulty-select" class="form-control">
+                            <option value="easy">Εύκολο</option>
+                            <option value="normal" selected>Κανονικό</option>
+                            <option value="hard">Δύσκολο</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="joystick-toggle" checked>
+                            <span>Εμφάνιση Joystick</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Ευαισθησία Joystick: <span id="sensitivity-value">2.0x</span></label>
+                        <div class="sensitivity-presets">
+                            <button type="button" class="preset-btn" data-sensitivity="2.0">Αργό</button>
+                            <button type="button" class="preset-btn" data-sensitivity="3.0">Κανονικό</button>
+                            <button type="button" class="preset-btn" data-sensitivity="4.5">Γρήγορο</button>
+                        </div>
+                        <input type="range" id="sensitivity-slider" class="sensitivity-slider" min="2.0" max="6.0" step="0.1" value="4.0">
+                        <div class="sensitivity-labels">
+                            <span>2.0x</span>
+                            <span>4.0x</span>
+                            <span>6.0x</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="auto-fire-toggle" checked>
+                            <span>Αυτόματα Πυρά</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="sound-toggle" checked>
+                            <span>Ενεργοποίηση Ήχου</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="vibration-toggle" checked>
+                            <span>Ενεργοποίηση Δόνησης</span>
+                        </label>
+                    </div>
+                </div>
+                <button class="btn btn--primary btn--lg" id="settings-start-btn">Έναρξη Παιχνιδιού</button>
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="screen hidden">
+            <div class="screen-content">
+                <h1>🛸 Η Μάχη Ξεκινά ⚔️</h1>
+                <p class="subtitle">Υπερασπίσου το Γαλαξία!</p>
+                <div class="instructions" id="game-instructions">
+                    <h3>Στοιχεία Ελέγχου:</h3>
+                    <div id="desktop-instructions">
+                        <p><strong>Κίνηση:</strong> Βέλη ή WASD</p>
+                        <p><strong>Σούπερ Όπλο:</strong> S (όταν είναι έτοιμο)</p>
+                        <p><strong>Παύση:</strong> P</p>
+                        <p class="note" id="auto-fire-note">Tip: Αυτόματα πυρά πάντα ενεργά!</p>
+                    </div>
+                    <div id="mobile-instructions" class="hidden">
+                        <p><strong>Κίνηση:</strong> Σύρε το δάχτυλο σου οπουδήποτε ή χρησιμοποίησε το joystick</p>
+                        <p><strong>Σούπερ Όπλο:</strong> Πάτησε το κουμπί 💥</p>
+                        <p class="note">Tip: Αυτόματα πυρά πάντα ενεργά!</p>
+                    </div>
+					<button class="btn btn--primary btn--lg" id="story-btn" style="margin-top: 12px;; border-color: #8b5cf6;">Το Χρονικό
+</button>
+                </div>
+                <button class="btn btn--primary btn--lg" id="start-btn">Έναρξη Παιχνιδιού</button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="screen hidden">
+            <div class="screen-content">
+                <h1>Game Over</h1>
+                <div class="final-score-container">
+                    <p class="score-label">Τελική Βαθμολογία:</p>
+                    <p class="final-score" id="final-score">0</p>
+                </div>
+                <button class="btn btn--primary btn--lg" id="restart-btn">Νέο Παιχνίδι</button>
+                <button class="btn btn--primary btn--lg" id="game-over-settings-btn" style="margin-top: 16px;">Ρυθμίσεις</button>
+                <button class="btn btn--primary btn--lg" id="share-score-btn" style="margin-top: 16px;">Κοινοποίηση Σκορ 🏆</button>
+            </div>
+        </div>
+
+        <!-- Pause Screen -->
+        <div id="pause-screen" class="screen hidden">
+            <div class="screen-content">
+                <h1>Παύση</h1>
+                <p class="subtitle">Πάτησε P για συνέχεια</p>
+            </div>
+        </div>
+
+        <!-- Game Canvas -->
+        <canvas id="game-canvas"></canvas>
+
+        <!-- Touch Controls -->
+        <div id="touch-controls" class="hidden">
+            <!-- Virtual Joystick (moved to bottom right) -->
+            <div id="joystick-zone">
+                <div id="joystick-base">
+                    <div id="joystick-stick"></div>
+                </div>
+            </div>
+            <!-- Super Weapon Button -->
+            <div id="super-weapon-zone">
+                <div id="super-weapon-button" class="disabled">
+                    <span class="icon">💥</span>
+                    <span class="charge-text">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- HUD -->
+        <div id="hud" class="hidden">
+            <div class="hud-left">
+                <div class="hud-item">
+                    <span class="hud-label">Score:</span>
+                    <span class="hud-value" id="score">0</span>
+                </div>
+                <div class="hud-item difficulty-indicator" id="difficulty-indicator">
+                    <span class="hud-label">Difficulty:</span>
+                    <span class="difficulty-level" id="difficulty-level">LEVEL 1</span>
+                    <span class="difficulty-percent" id="difficulty-percent">+0%</span>
+                </div>
+            </div>
+            <div class="hud-center">
+                <div class="hud-item super-weapon-indicator" id="super-weapon-hud">
+                    <span class="hud-label">Σούπερ Όπλο:</span>
+                    <div class="super-weapon-bar">
+                        <div class="super-weapon-fill" id="super-weapon-fill"></div>
+                    </div>
+                    <span class="super-weapon-status" id="super-weapon-status">0/650</span>
+                </div>
+            </div>
+            <div class="hud-right">
+                <div class="hud-item">
+                    <span class="hud-label">Ζωές:</span>
+                    <div class="lives-container" id="lives-container">
+                        <span class="life">❤️</span>
+                        <span class="life">❤️</span>
+                        <span class="life">❤️</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Active Bonuses Display -->
+        <div id="active-bonuses" class="hidden">
+            <div class="bonuses-container" id="bonuses-container"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
