@@ -1518,9 +1518,37 @@ body {
 }
 
 #super-weapon-button .charge-text {
-  font-size: 11px;
-  font-weight: var(--font-weight-bold);
-  color: rgba(0, 0, 0, 0.8);
+  color: #fff;
+    font-size: 12px;
+    font-weight: var(--font-weight-bold);
+    background: linear-gradient(90deg, #fff 0%, #e0e0e0 48%, #b4e6ff 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: neon-white-pulse 1.5s infinite alternate;
+    text-shadow:
+        0 0 8px #ffffff,
+        0 0 24px #d0f3ff,
+        0 0 42px #e0e0e0,
+        0 0 58px #b4e6ff;
+    letter-spacing: 0.5px;
+}
+
+@keyframes neon-white-pulse {
+    0% {
+        text-shadow:
+            0 0 8px #fff,
+            0 0 18px #c6e7ff,
+            0 0 32px #d0f3ff;
+        filter: brightness(1.25);
+    }
+    100% {
+        text-shadow:
+            0 0 18px #fff,
+            0 0 40px #e0e0e0,
+            0 0 62px #b4e6ff;
+        filter: brightness(1.6);
+    }
 }
 
 #super-weapon-button.ready {
