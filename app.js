@@ -1808,91 +1808,91 @@ const GALLERY_ITEMS = [
   {
     id: 1,
     title: "Nova Battleship",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/nova_battle_ship.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/nova_battle_ship.png",
     category: "enemies"
   },
   {
     id: 2,
     title: "Xenophages",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/xenophages.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/xenophages.png",
     category: "scenes"
   },
   {
     id: 3,
     title: "Assemble the Army",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/assemble_the_army.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/assemble_the_army.png",
     category: "enemies"
   },
   {
     id: 4,
     title: "The Battle of the Singularity",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/black_hole.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/black_hole.png",
     category: "player"
   },
   {
     id: 5,
     title: "Ultimate Defence",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/shileds_on.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/shileds_on.png",
     category: "backgrounds"
   },
   {
     id: 6,
     title: "Critical Hit",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/critical_hit.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/critical_hit.png",
     category: "ui"
   },
    {
     id: 7,
     title: "Amalgama",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/amalgama.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/amalgama.png",
     category: "ui"
   },
   {
     id: 8,
     title: "Mothership",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/mothership.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/mothership.png",
     category: "enemies"
   },
   {
     id: 9,
     title: "Yamato Gun",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/yamato_gun.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/yamato_gun.png",
     category: "scenes"
   },
   {
     id: 10,
     title: "The Headquarters Space Station",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/the_station.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/the_station.png",
     category: "enemies"
   },
   {
     id: 11,
     title: "The Two Suns Battle",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/two_suns.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/two_suns.png",
     category: "player"
   },
   {
     id: 12,
     title: "The Hive",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/the_hive.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/the_hive.png",
     category: "backgrounds"
   },
   {
     id: 13,
     title: "Deadly Tentacles",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/tentacles.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/tentacles.png",
     category: "ui"
   },
    {
     id: 14,
     title: "Ultimate Attack",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/super_weapon.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/super_weapon.png",
     category: "ui"
   },
   {
     id: 15,
     title: "Neutrino Laser Beam",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/laser_beam.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/laser_beam.png",
     category: "ui"
   },
   // Προσθέστε περισσότερα artwork εδώ
