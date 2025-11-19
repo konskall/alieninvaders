@@ -3,7 +3,7 @@
   "short_name": "Alien Invaders",
   "icons": [
     {
-      "src": "https://konskall.github.io/alieninvaders/web-app-manifest-192x192.png",
+      "src": "https://.github.io/alieninvaders/web-app-manifest-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
