@@ -2336,7 +2336,7 @@ const GALLERY_ITEMS = [
   {
     id: 5,
     title: "Ultimate Defence",
-    image: "https://konskall-ai.github.io/alieninvaders/Gallery/shileds_on.png",
+    image: "https://konskall.github.io/alieninvaders/Gallery/shileds_on.png",
     category: "backgrounds"
   },
   {
