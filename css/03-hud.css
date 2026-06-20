@@ -1,0 +1,378 @@
+/* HUD */
+#hud {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(750px, 100vw);
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--space-20);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.hud-center {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  max-width: 300px;
+  margin: 0 var(--space-16);
+}
+
+#hud.hidden {
+  display: none;
+}
+
+.hud-left,
+.hud-right {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: var(--space-16);
+}
+
+.hud-item {
+  background: rgba(0, 0, 0, 0.7);
+  padding: var(--space-12) var(--space-20);
+  border-radius: var(--radius-base);
+  border: 2px solid rgba(50, 184, 198, 0.3);
+  backdrop-filter: blur(5px);
+}
+
+.hud-label {
+  color: var(--color-teal-300);
+  font-weight: var(--font-weight-semibold);
+  margin-right: var(--space-8);
+  font-size: var(--font-size-base);
+}
+
+.hud-value {
+  color: var(--color-gray-200);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-xl);
+}
+
+.lives-container {
+  display: inline-flex;
+  gap: var(--space-8);
+}
+
+.life {
+  font-size: var(--font-size-xl);
+  filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.5));
+}
+
+/* Difficulty Indicator */
+.difficulty-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.difficulty-level {
+  color: var(--color-gray-200);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-base);
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+
+.difficulty-percent {
+  color: var(--color-gray-300);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  transition: color 0.3s ease;
+}
+
+/* Level Range 1: Levels 1-10 - Green shades (Entry) */
+.difficulty-indicator.level-range-1 .difficulty-level {
+  color: #00FF00;
+  text-shadow: 0 0 10px rgba(0, 255, 0, 0.6);
+}
+
+/* Level Range 2: Levels 11-20 - Light green to yellow (Early progression) */
+.difficulty-indicator.level-range-2 .difficulty-level {
+  color: #99FF00;
+  text-shadow: 0 0 10px rgba(153, 255, 0, 0.6);
+}
+
+/* Level Range 3: Levels 21-30 - Yellow to yellow-orange (Moderate) */
+.difficulty-indicator.level-range-3 .difficulty-level {
+  color: #FFFF00;
+  text-shadow: 0 0 10px rgba(255, 255, 0, 0.7);
+}
+
+/* Level Range 4: Levels 31-40 - Orange shades (Increasing) */
+.difficulty-indicator.level-range-4 .difficulty-level {
+  color: #FFCC00;
+  text-shadow: 0 0 12px rgba(255, 204, 0, 0.7);
+}
+
+/* Level Range 5: Levels 41-50 - Orange to dark orange (Challenging) */
+.difficulty-indicator.level-range-5 .difficulty-level {
+  color: #FF9900;
+  text-shadow: 0 0 12px rgba(255, 153, 0, 0.7);
+  animation: difficulty-pulse-mild 2s infinite;
+}
+
+/* Level Range 6: Levels 51-60 - Red progression (Hard) */
+.difficulty-indicator.level-range-6 .difficulty-level {
+  color: #FF6600;
+  text-shadow: 0 0 15px rgba(255, 102, 0, 0.8);
+  animation: difficulty-pulse-mild 1.8s infinite;
+}
+
+/* Level Range 7: Levels 61-70 - Dark red (Very hard) */
+.difficulty-indicator.level-range-7 .difficulty-level {
+  color: #FF3333;
+  text-shadow: 0 0 15px rgba(255, 51, 51, 0.8);
+  animation: difficulty-pulse 1.5s infinite;
+}
+
+/* Level Range 8: Levels 71-80 - Bright red (Intense) */
+.difficulty-indicator.level-range-8 .difficulty-level {
+  color: #FF0000;
+  text-shadow: 0 0 18px rgba(255, 0, 0, 0.9);
+  animation: difficulty-pulse 1.2s infinite;
+}
+
+/* Level Range 9: Levels 81-90 - Red/Pink blend (Extreme) */
+.difficulty-indicator.level-range-9 .difficulty-level {
+  color: #FF0066;
+  text-shadow: 0 0 20px rgba(255, 0, 102, 0.9);
+  animation: difficulty-pulse-intense 1s infinite;
+}
+
+/* Level Range 10: Levels 91-100 - Pink/Purple (Ultimate) */
+.difficulty-indicator.level-range-10 .difficulty-level {
+  color: #CC00FF;
+  text-shadow: 0 0 25px rgba(204, 0, 255, 1), 0 0 40px rgba(204, 0, 255, 0.7);
+  animation: difficulty-pulse-ultimate 0.8s infinite;
+}
+
+@keyframes difficulty-pulse-mild {
+  0%, 100% {
+    text-shadow: 0 0 12px rgba(255, 153, 0, 0.7);
+  }
+  50% {
+    text-shadow: 0 0 18px rgba(255, 153, 0, 0.9);
+  }
+}
+
+@keyframes difficulty-pulse {
+  0%, 100% {
+    text-shadow: 0 0 15px rgba(255, 0, 0, 0.8);
+  }
+  50% {
+    text-shadow: 0 0 25px rgba(255, 0, 0, 1);
+  }
+}
+
+@keyframes difficulty-pulse-intense {
+  0%, 100% {
+    text-shadow: 0 0 20px rgba(255, 0, 102, 0.9);
+    transform: scale(1);
+  }
+  50% {
+    text-shadow: 0 0 30px rgba(255, 0, 102, 1), 0 0 40px rgba(255, 0, 102, 0.7);
+    transform: scale(1.05);
+  }
+}
+
+@keyframes difficulty-pulse-ultimate {
+  0%, 100% {
+    text-shadow: 0 0 25px rgba(204, 0, 255, 1), 0 0 40px rgba(204, 0, 255, 0.7);
+    transform: scale(1);
+  }
+  50% {
+    text-shadow: 0 0 35px rgba(204, 0, 255, 1), 0 0 60px rgba(204, 0, 255, 0.9), 0 0 80px rgba(204, 0, 255, 0.5);
+    transform: scale(1.08);
+  }
+}
+
+/* Super Weapon HUD */
+.super-weapon-indicator {
+  min-width: 250px;
+}
+
+.super-weapon-bar {
+  display: inline-block;
+  width: 120px;
+  height: 12px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(50, 184, 198, 0.4);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 0 var(--space-8);
+  vertical-align: middle;
+}
+
+.super-weapon-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-teal-500), var(--color-teal-300));
+  width: 0%;
+  transition: width 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 0 10px rgba(50, 184, 198, 0.6);
+}
+
+.super-weapon-fill.ready {
+  background: linear-gradient(90deg, #FFD700, #FFA500);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.9);
+  animation: pulse-glow 1s infinite;
+}
+
+.super-weapon-status {
+  color: var(--color-gray-200);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  vertical-align: middle;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.9);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 215, 0, 1);
+  }
+}
+
+/* Active Bonuses Display - MINIMAL STYLE */
+#active-bonuses {
+  position: absolute;
+  top: 80px;
+  right: calc(50% - 355px);
+  z-index: 6;
+  pointer-events: none;
+}
+
+#active-bonuses.hidden {
+  display: none;
+}
+
+.bonuses-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.bonus-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: bonus-appear 0.3s ease-out;
+  position: relative;
+}
+
+@keyframes bonus-appear {
+  from {
+    opacity: 0;
+    transform: translateX(20px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.bonus-icon {
+  font-size: 32px;
+  line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
+  margin-bottom: 2px;
+}
+
+.bonus-indicator.shield .bonus-icon {
+  filter: drop-shadow(0 0 10px rgba(0, 204, 255, 0.8));
+}
+
+.bonus-indicator.rapid-fire .bonus-icon {
+  filter: drop-shadow(0 0 10px rgba(255, 255, 0, 0.8));
+}
+
+.bonus-indicator.multi-shot .bonus-icon {
+  filter: drop-shadow(0 0 10px rgba(0, 153, 255, 0.8));
+}
+
+.bonus-indicator.multiplier .bonus-icon {
+  filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.8));
+}
+
+.bonus-info {
+  display: none;
+}
+
+.bonus-name {
+  display: none;
+}
+
+.bonus-timer {
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: var(--font-weight-bold);
+  display: block;
+  text-align: center;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8), 0 0 8px rgba(255, 255, 255, 0.4);
+  line-height: 1;
+}
+
+/* Final Score */
+.final-score-container {
+  margin: var(--space-24) 0;
+  padding: var(--space-20);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-base);
+}
+
+.score-label {
+  color: var(--color-gray-200);
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--space-8);
+}
+
+.final-score {
+  font-size: 48px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+  text-shadow: 0 0 20px rgba(50, 184, 198, 0.7);
+}
+
+.credits {
+  margin-top: var(--space-24);
+  padding: var(--space-16);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-base);
+  animation: fade-in 1s ease-in;
+}
+
+.credits-text {
+  color: var(--color-gray-200);
+  font-size: var(--font-size-base);
+  margin: 0;
+}
+
+.creator-name {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-xl);
+  text-shadow: 0 0 10px rgba(50, 184, 198, 0.5);
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+

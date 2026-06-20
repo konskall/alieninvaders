@@ -1,0 +1,208 @@
+/* Touch Controls */
+#touch-controls {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3;
+}
+
+#touch-controls.hidden {
+  display: none;
+}
+
+/* Joystick Zone - MOVED TO BOTTOM RIGHT */
+#joystick-zone {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 160px;
+  height: 160px;
+  pointer-events: all;
+}
+
+#joystick-base {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(50, 184, 198, 0.15);
+  border: 3px solid rgba(50, 184, 198, 0.4);
+  box-shadow: 0 0 20px rgba(50, 184, 198, 0.3),
+              inset 0 0 15px rgba(0, 0, 0, 0.5);
+  margin: 20px;
+  touch-action: none;
+}
+
+#joystick-stick {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #32B8C6, #21808D);
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 15px rgba(50, 184, 198, 0.8),
+              0 4px 8px rgba(0, 0, 0, 0.3);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: all 0.05s ease-out;
+  touch-action: none;
+}
+
+#joystick-stick.active {
+  background: linear-gradient(135deg, #50D0DD, #32B8C6);
+  box-shadow: 0 0 25px rgba(50, 184, 198, 1),
+              0 4px 8px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+/* Super Weapon Zone - REPLACES FIRE BUTTON */
+#super-weapon-zone {
+  position: absolute;
+  left: calc(50% - 355px);
+  bottom: 60px;
+  width: 110px;
+  height: 110px;
+  pointer-events: all;
+}
+
+#super-weapon-button {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.9), rgba(255, 165, 0, 0.9));
+  border: 4px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 25px rgba(255, 215, 0, 0.7),
+              0 4px 12px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  touch-action: none;
+  user-select: none;
+  position: relative;
+}
+
+#super-weapon-button.disabled {
+  background: linear-gradient(135deg, rgba(119, 124, 124, 0.5), rgba(98, 108, 113, 0.5));
+  box-shadow: 0 0 10px rgba(119, 124, 124, 0.3);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+#super-weapon-button .icon {
+  font-size: 36px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+#super-weapon-button .charge-text {
+  color: #fff;
+    font-size: 11px;
+    font-weight: var(--font-weight-bold);
+    background: linear-gradient(90deg, #fff 0%, #e0e0e0 48%, #b4e6ff 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: neon-white-pulse 1.5s infinite alternate;
+    text-shadow:
+        0 0 8px #ffffff,
+        0 0 24px #d0f3ff,
+        0 0 42px #e0e0e0,
+        0 0 58px #b4e6ff;
+    letter-spacing: 0.5px;
+}
+
+@keyframes neon-white-pulse {
+    0% {
+        text-shadow:
+            0 0 8px #fff,
+            0 0 18px #c6e7ff,
+            0 0 32px #d0f3ff;
+        filter: brightness(1.25);
+    }
+    100% {
+        text-shadow:
+            0 0 18px #fff,
+            0 0 40px #e0e0e0,
+            0 0 62px #b4e6ff;
+        filter: brightness(1.6);
+    }
+}
+
+#super-weapon-button.ready {
+  animation: super-weapon-ready 1s infinite;
+}
+
+#super-weapon-button:active:not(.disabled),
+#super-weapon-button.active:not(.disabled) {
+  transform: scale(0.9);
+  box-shadow: 0 0 35px rgba(255, 215, 0, 1),
+              0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes super-weapon-ready {
+  0%, 100% {
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.7), 0 4px 12px rgba(0, 0, 0, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(255, 215, 0, 1), 0 4px 12px rgba(0, 0, 0, 0.4);
+    transform: scale(1.05);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .screen-content {
+    padding: var(--space-20);
+    margin: var(--space-16);
+  }
+  
+  .screen-content h1 {
+    font-size: var(--font-size-3xl);
+  }
+  
+  #hud {
+    padding: var(--space-12);
+    left: 0;
+    transform: none;
+    width: 100%;
+  }
+
+  #active-bonuses {
+    right: 20px;
+  }
+  
+  .hud-item {
+    padding: var(--space-8) var(--space-12);
+    font-size: 12px;
+  }
+  
+  .hud-label {
+    font-size: 12px;
+  }
+  
+  .hud-value {
+    font-size: var(--font-size-base);
+  }
+  
+  .life {
+    font-size: var(--font-size-base);
+  }
+  
+  .super-weapon-bar {
+    width: 80px;
+    height: 10px;
+  }
+  
+  .super-weapon-status {
+    font-size: 11px;
+  }
+}
+
