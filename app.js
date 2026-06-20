@@ -281,7 +281,7 @@ class LeaderboardManager {
             if (data) {
                 this.scores = Object.values(data);
                 this.scores.sort((a, b) => b.score - a.score);
-                this.scores = this.scores.slice(0, 10);
+                this.scores = this.scores.slice(0, 50);
             } else {
                 this.scores = [];
             }
@@ -354,7 +354,7 @@ class LeaderboardManager {
     }
 
     isTopScore(score) {
-        if (this.scores.length < 10) return true;
+        if (this.scores.length < 50) return true;
         return score > this.scores[this.scores.length - 1].score;
     }
 }
