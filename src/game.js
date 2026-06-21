@@ -492,6 +492,8 @@ export class Game {
         document.getElementById('menu-settings-btn').addEventListener('click', () => {
             this.openSettings('menu');
         });
+        const coopBtn = document.getElementById('coop-btn');
+        if (coopBtn) coopBtn.addEventListener('click', () => { if (this.coopLobby) this.coopLobby.show(); });
         // Tap the menu logo to replay the cinematic intro
         const menuBrand = document.getElementById('menu-brand-btn');
         if (menuBrand) {
@@ -2364,6 +2366,36 @@ closeStoryScreen() {
     document.getElementById('start-screen').classList.remove('hidden');
     this.state = 'menu';
 }
+    // --- Online co-op (connection milestone: builds the session + drives the
+    // network tick; the real game world adapter replaces makeCoopWorld next). ---
+    makeCoopWorld(role) {
+        const w = {
+            role, recvSnap: 0, recvInput: 0,
+            getSnapshot() {
+                return { ships: [{ id: 'host', x: 100, y: 200, health: 3, alive: true }],
+                         enemies: [], bullets: [], homing: [], boss: null, pickups: [],
+                         hud: { score: 0 }, events: [] };
+            },
+            applySnapshot() { w.recvSnap++; },
+            getLocalInput() { return { x: 50, y: 600, firing: true, alive: true }; },
+            applyRemoteInput() { w.recvInput++; }
+        };
+        this._coopWorld = w;
+        return w;
+    }
+
+    beginCoop(session, role, difficulty, code) {
+        this.coopSession = session;
+        this.coopRole = role;
+        this.coopCode = code;
+        this.coopDifficulty = difficulty;
+        this.mode = role === 'host' ? 'coopHost' : 'coopGuest';
+        if (this._coopTimer) clearInterval(this._coopTimer);
+        this._coopTimer = setInterval(() => {
+            try { session.tick(); } catch (e) { /* transport closed */ }
+        }, 66);
+    }
+
     gameLoop() {
         this.handleInput();
         this.updateGame();
