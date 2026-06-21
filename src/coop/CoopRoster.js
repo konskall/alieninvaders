@@ -25,5 +25,6 @@ export class CoopRoster {
 
   reset() {
     this.players = [];
+    this.localIndex = 0;   // back to a single local player at index 0
   }
 }

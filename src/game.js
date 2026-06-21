@@ -1401,7 +1401,11 @@ escapeHtml(text) {
 
     activateSuperWeapon() {
         if (!this.superWeapon.ready || this.superWeapon.active) return;
-        
+        // Co-op: the super weapon is a shared TEAM resource the host simulates.
+        // The guest can't fire it locally — it asks the host (via its input) and
+        // the host runs the real thing, which then syncs back to the guest.
+        if (this.mode === 'coopGuest') { this._coopSuperReq = true; return; }
+
         this.superWeapon.active = true;
         this.superWeapon.activationTime = this.currentTime;
         this.superWeapon.ready = false;
@@ -1754,10 +1758,15 @@ escapeHtml(text) {
             const bonus = this.bonusPickups[i];
             bonus.update(CONFIG.canvas, this.player.x, this.player.y);
 
-            const collected = bonus.collidesWith(this.player.x, this.player.y, this.player.size);
-            if (collected) this.collectBonus(bonus);
+            // Co-op: EITHER ship can collect. Check every alive ship, not just the
+            // host's — otherwise the guest can stand on a perk and never get it.
+            let collector = null;
+            for (const ship of this.roster.players) {
+                if (ship && ship.health > 0 && bonus.collidesWith(ship.x, ship.y, ship.size)) { collector = ship; break; }
+            }
+            if (collector) this.collectBonus(bonus, collector);
 
-            if (collected || bonus.isDead()) {
+            if (collector || bonus.isDead()) {
                 this.bonusPickups[i] = this.bonusPickups[this.bonusPickups.length - 1];
                 this.bonusPickups.pop();
             }
@@ -2166,8 +2175,8 @@ escapeHtml(text) {
             // Draw every ship in the roster (1 in solo, 2 in co-op).
             for (const ship of this.roster.players) {
                 if (!ship || ship.health <= 0) continue;
-                // Shield ring only for the local player's active shield bonus.
-                if (ship === this.player && this.activeBonuses.shield) {
+                // Team shield protects both ships, so draw the ring on each one.
+                if (this.activeBonuses.shield) {
                     this.ctx.save();
                     const shieldPulse = 0.7 + Math.sin(Date.now() * 0.005) * 0.3;
                     this.ctx.globalAlpha = shieldPulse;
@@ -2243,24 +2252,25 @@ escapeHtml(text) {
         }
     }
     
-    collectBonus(bonus) {
+    collectBonus(bonus, ship = this.player) {
         // PROFESSIONAL: Sound and vibration feedback
         this.soundManager.bonus();
         this.vibrationManager.bonus();
-        
+
         // Create pickup effect
         for (let i = 0; i < 15; i++) {
             this.particles.push(new Particle(bonus.x, bonus.y, bonus.config.color, 'glow'));
         }
-        
-        // Apply bonus effect
+
+        // Apply bonus effect. shield/rapidFire/multiShot/multiplier are team-wide;
+        // health heals the SHIP that actually picked it up (individual lives).
         switch (bonus.type) {
             case 'shield':
                 this.activeBonuses.shield = { startTime: Date.now(), duration: 15000 };
                 break;
             case 'health':
-                if (this.player.health < CONFIG.game.initialHealth) {
-                    this.player.health++;
+                if (ship && ship.health < CONFIG.game.initialHealth) {
+                    ship.health++;
                     this.updateHUD();
                 }
                 break;
@@ -2537,7 +2547,7 @@ closeStoryScreen() {
     _fireRemoteShip() {
         const ship = this.coopRemoteShip;
         if (!ship || ship.health <= 0) return;
-        const bullets = ship.shoot(this.currentTime, false);
+        const bullets = ship.shoot(this.currentTime, !!this.activeBonuses.multiShot);
         if (bullets) Array.isArray(bullets) ? this.bullets.push(...bullets) : this.bullets.push(bullets);
     }
 
@@ -2586,13 +2596,16 @@ closeStoryScreen() {
 
     coopGetLocalInput() {
         const s = this.player;
-        return { x: s ? s.x : 0, y: s ? s.y : 0, firing: true, alive: !!(s && s.health > 0) };
+        const sup = !!this._coopSuperReq;
+        this._coopSuperReq = false;   // send the request exactly once
+        return { x: s ? s.x : 0, y: s ? s.y : 0, firing: true, alive: !!(s && s.health > 0), super: sup };
     }
 
     coopApplyRemoteInput(msg) {
         this._lastRecvAt = Date.now();
         const ship = this.coopRemoteShip;   // host: the guest ship
         if (ship && typeof msg.x === 'number') { ship.x = msg.x; ship.y = msg.y; }
+        if (msg.super) this.activateSuperWeapon();   // guest fired the team super weapon
     }
 
     coopBuildSnapshot() {
@@ -2603,7 +2616,8 @@ closeStoryScreen() {
             homing: this.homingBullets.map(h => ({ x: h.x, y: h.y })),
             boss: this.boss ? { x: this.boss.x, y: this.boss.y, hp: this.boss.health, maxHp: this.boss.maxHealth, size: this.boss.size } : null,
             pickups: this.bonusPickups.map(p => ({ x: p.x, y: p.y, type: p.type })),
-            hud: { score: this.score, level: this.progressiveDifficulty.currentLevel, combo: this.combo, kills: this.killCount, over: this.state === 'gameOver' },
+            hud: { score: this.score, level: this.progressiveDifficulty.currentLevel, combo: this.combo, kills: this.killCount, over: this.state === 'gameOver',
+                   superCharge: this.superWeapon.charge, superReady: this.superWeapon.ready, superActive: this.superWeapon.active },
             events: [],
         };
     }
@@ -2650,7 +2664,15 @@ closeStoryScreen() {
             ship.health = s.health;
             if (s.i !== localIdx) { ship.x = s.x; ship.y = s.y; }   // remote ship pos from host; own ship stays local
         });
-        if (msg.hud) { this.score = msg.hud.score; this.displayScore = msg.hud.score; this.combo = msg.hud.combo || 0; this.killCount = msg.hud.kills || 0; }
+        if (msg.hud) {
+            this.score = msg.hud.score; this.displayScore = msg.hud.score; this.combo = msg.hud.combo || 0; this.killCount = msg.hud.kills || 0;
+            // Mirror the team super-weapon so the guest's gauge/button is correct
+            // and it can fire when ready (even if the host's ship has died).
+            this.superWeapon.charge = msg.hud.superCharge || 0;
+            this.superWeapon.ready = !!msg.hud.superReady;
+            this.superWeapon.active = !!msg.hud.superActive;
+            this.updateSuperWeaponUI();
+        }
         this.updateHUD();
         if (msg.hud && msg.hud.over && this.state === 'playing') this.gameOver();
     }

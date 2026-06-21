@@ -24,7 +24,8 @@ export function buildInput(ship) {
     x: ship.x,
     y: ship.y,
     firing: !!ship.firing,
-    alive: !!ship.alive
+    alive: !!ship.alive,
+    super: !!ship.super   // guest asking the host to fire the team super weapon
   };
 }
 

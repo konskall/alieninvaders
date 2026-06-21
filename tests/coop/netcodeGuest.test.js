@@ -23,7 +23,7 @@ test('tick sends an input message built from the local input', () => {
   guest.tick();
 
   assert.equal(got.length, 1);
-  assert.deepEqual(got[0], { t: 'input', x: 5, y: 6, firing: false, alive: true });
+  assert.deepEqual(got[0], { t: 'input', x: 5, y: 6, firing: false, alive: true, super: false });
 });
 
 test('applies a state message with a newer seq', () => {

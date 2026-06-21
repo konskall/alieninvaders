@@ -11,7 +11,12 @@ test('MSG has the spec message types', () => {
 
 test('buildInput shapes a ship input message', () => {
   const msg = buildInput({ x: 12.5, y: 30, firing: 1, alive: true, extra: 'ignored' });
-  assert.deepEqual(msg, { t: 'input', x: 12.5, y: 30, firing: true, alive: true });
+  assert.deepEqual(msg, { t: 'input', x: 12.5, y: 30, firing: true, alive: true, super: false });
+});
+
+test('buildInput carries the super-weapon request flag', () => {
+  const msg = buildInput({ x: 0, y: 0, firing: false, alive: true, super: true });
+  assert.equal(msg.super, true);
 });
 
 test('buildState includes seq and all world fields', () => {
