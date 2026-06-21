@@ -300,9 +300,12 @@ export class Game {
 
         // Display size: solo fills its logical area 1:1; co-op letterbox-fits
         // ("contain") the fixed arena into the viewport so the whole field shows.
-        const scale = coop
-            ? Math.min(window.innerWidth / width, window.innerHeight / height)
-            : 1;
+        // Measure against the actual container (100dvh) rather than window.inner*,
+        // which on iOS Safari / PWA mismatches the visible area (toolbar/notch).
+        const host = this.canvas.parentElement;
+        const availW = (host && host.clientWidth) || window.innerWidth;
+        const availH = (host && host.clientHeight) || window.innerHeight;
+        const scale = coop ? Math.min(availW / width, availH / height) : 1;
         const cssW = width * scale;
         const cssH = height * scale;
 
@@ -1591,6 +1594,11 @@ escapeHtml(text) {
                     this.soundManager.playerShoot();
                 }
             }
+        } else if (shouldFire && this.mode === 'coopGuest' && this.player && this.player.health > 0) {
+            // The host owns the real bullets, but the guest should still HEAR its
+            // own ship firing. shoot() gates on the fire cadence; play the sound
+            // when it would fire and discard the returned bullets.
+            if (this.player.shoot(this.currentTime, hasMultiShot)) this.soundManager.playerShoot();
         }
     }
 
@@ -2442,7 +2450,7 @@ closeStoryScreen() {
             try { session.tick(); } catch (e) { /* transport closed */ }
             // Watchdog: no message from the peer for 4s => treat as disconnected.
             if (this.state === 'playing' && Date.now() - this._lastRecvAt > 4000) this._coopDisconnected();
-        }, 66);
+        }, 33);   // ~30 Hz: smoother remote motion than 15 Hz (P2P over WebRTC handles it)
     }
 
     _coopDisconnected() {
@@ -2600,14 +2608,41 @@ closeStoryScreen() {
         };
     }
 
+    // Reconcile a render array against snapshot data, REUSING existing entity
+    // objects (only allocate on count growth or a type change). Recreating every
+    // entity each snapshot churns the GC and stutters the guest on mobile.
+    _coopReconcile(arr, list, needsNew, factory, assign) {
+        for (let i = 0; i < list.length; i++) {
+            let e = arr[i];
+            if (!e || needsNew(e, list[i])) { e = factory(list[i]); arr[i] = e; }
+            assign(e, list[i]);
+        }
+        arr.length = list.length;   // drop any extras (entities that died)
+    }
+
     coopApplySnapshot(msg) {
         if (!msg) return;
         this._lastRecvAt = Date.now();
-        this.enemies = (msg.enemies || []).map(e => { const en = new Enemy(e.x, e.y, e.type); en.health = e.hp; en.x = e.x; en.y = e.y; return en; });
-        this.bullets = (msg.bullets || []).map(b => { const bu = new Bullet(b.x, b.y, 0, 0, b.color, b.p, b.et); bu.x = b.x; bu.y = b.y; return bu; });
-        this.homingBullets = (msg.homing || []).map(h => { const hb = new HomingBullet(h.x, h.y, h.x, h.y); hb.x = h.x; hb.y = h.y; return hb; });
-        if (msg.boss) { const bo = new Boss(CONFIG.canvas.width, CONFIG.canvas.height, 10); bo.x = msg.boss.x; bo.y = msg.boss.y; bo.health = msg.boss.hp; bo.maxHealth = msg.boss.maxHp; bo.size = msg.boss.size; bo.entranceComplete = true; this.boss = bo; } else { this.boss = null; }
-        this.bonusPickups = (msg.pickups || []).map(p => new BonusPickup(p.x, p.y, p.type));
+        this._coopReconcile(this.enemies, msg.enemies || [],
+            (e, d) => e.typeName !== d.type,
+            d => new Enemy(d.x, d.y, d.type),
+            (e, d) => { e.x = d.x; e.y = d.y; e.health = d.hp; });
+        this._coopReconcile(this.bullets, msg.bullets || [],
+            (b, d) => b.isPlayerBullet !== d.p || b.enemyType !== d.et,
+            d => new Bullet(d.x, d.y, 0, 0, d.color, d.p, d.et),
+            (b, d) => { b.x = d.x; b.y = d.y; b.color = d.color; });
+        this._coopReconcile(this.homingBullets, msg.homing || [],
+            () => false,
+            d => new HomingBullet(d.x, d.y, d.x, d.y),
+            (h, d) => { h.x = d.x; h.y = d.y; });
+        this._coopReconcile(this.bonusPickups, msg.pickups || [],
+            (p, d) => p.type !== d.type,
+            d => new BonusPickup(d.x, d.y, d.type),
+            (p, d) => { p.x = d.x; p.y = d.y; });
+        if (msg.boss) {
+            if (!this.boss) { this.boss = new Boss(CONFIG.canvas.width, CONFIG.canvas.height, 10); this.boss.entranceComplete = true; }
+            const bo = this.boss; bo.x = msg.boss.x; bo.y = msg.boss.y; bo.health = msg.boss.hp; bo.maxHealth = msg.boss.maxHp; bo.size = msg.boss.size;
+        } else { this.boss = null; }
         const localIdx = this.roster.localIndex;
         (msg.ships || []).forEach(s => {
             const ship = this.roster.players[s.i];
