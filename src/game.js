@@ -1989,10 +1989,10 @@ escapeHtml(text) {
         
         // Background elements DISABLED - clean space background
 
-        // Wave announcement banner
+        // Wave announcement banner (only during gameplay — never on splash/menu)
         const bannerElapsed = this.currentTime - (this.waveState.bannerStartTime || 0);
         const bannerRemaining = WAVE_CONFIG.ANNOUNCE_DURATION - bannerElapsed;
-        if (bannerRemaining > 0) {
+        if (this.state === 'playing' && bannerRemaining > 0) {
             const alpha = Math.min(1, bannerRemaining / 200);
             this.ctx.save();
             this.ctx.globalAlpha = alpha;
