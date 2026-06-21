@@ -840,6 +840,7 @@ export class Game {
         this._lastWasCoop = false;
         this._hudLives = -1;                // force the lives HUD to rebuild on first updateHUD
         this._coopBossSig = undefined; this._coopBonusSig = undefined;
+        this._coopSuperSig = undefined; this._coopHudSig = undefined;
         this.keys = {};
         this.score = 0;
         this.enemies = [];
@@ -932,6 +933,7 @@ export class Game {
         if (this.state === 'playing') {
             this.state = 'paused';
             document.getElementById('pause-screen').classList.remove('hidden');
+            this._updateOrientationPrompt();   // hide the rotate hint behind the pause panel
         }
     }
 
@@ -939,6 +941,7 @@ export class Game {
         if (this.state === 'paused') {
             this.state = 'playing';
             document.getElementById('pause-screen').classList.add('hidden');
+            this._updateOrientationPrompt();   // re-show if still landscape
         }
     }
 
@@ -1100,6 +1103,7 @@ export class Game {
     document.getElementById('hud').classList.add('hidden');
     document.getElementById('active-bonuses').classList.add('hidden');
     document.getElementById('touch-controls').classList.add('hidden');
+    this._updateOrientationPrompt();   // hide the rotate hint over the game-over panel
     this.resetJoystick();
 }
 
@@ -1427,6 +1431,18 @@ escapeHtml(text) {
         }
     }
 
+    // Nearest ALIVE roster ship to (x,y) — co-op enemies/boss/homing aim at whoever
+    // is closest, not always the host. Falls back to the local ship (solo = the only ship).
+    _aimShip(x, y) {
+        let best = null, bd = Infinity;
+        for (const s of this.roster.players) {
+            if (!s || s.health <= 0) continue;
+            const d = (s.x - x) * (s.x - x) + (s.y - y) * (s.y - y);
+            if (d < bd) { bd = d; best = s; }
+        }
+        return best || this.player;
+    }
+
     // Map a player-bullet owner (roster index) to that player's super-weapon gauge.
     // Missing owner or the local index -> local gauge (covers solo); on the host,
     // 0 -> own gauge, 1 -> partner's.
@@ -1698,10 +1714,11 @@ escapeHtml(text) {
 
         // Update enemies
         this.enemies.forEach(enemy => {
-            enemy.update(this.player.x, this.player.y, CONFIG.canvas);
-            
+            const aim = this._aimShip(enemy.x, enemy.y);
+            enemy.update(aim.x, aim.y, CONFIG.canvas);
+
             // Enemy shooting
-            const bullet = enemy.shoot(this.currentTime, this.player.x, this.player.y);
+            const bullet = enemy.shoot(this.currentTime, aim.x, aim.y);
             if (bullet) {
                 if (Array.isArray(bullet)) {
                     this.bullets.push(...bullet);
@@ -1723,9 +1740,10 @@ escapeHtml(text) {
 
         // Update boss
         if (this.boss) {
-            this.boss.update(this.player.x, this.player.y);
+            const aim = this._aimShip(this.boss.x, this.boss.y);
+            this.boss.update(aim.x, aim.y);
 
-            const bossBullets = this.boss.shoot(this.currentTime, this.player.x, this.player.y);
+            const bossBullets = this.boss.shoot(this.currentTime, aim.x, aim.y);
             if (bossBullets) {
                 bossBullets.forEach(b => {
                     if (b instanceof HomingBullet) {
@@ -1746,7 +1764,8 @@ escapeHtml(text) {
         // Update homing bullets (in-place swap+pop)
         for (let i = this.homingBullets.length - 1; i >= 0; i--) {
             const hb = this.homingBullets[i];
-            hb.update(this.player.x, this.player.y);
+            const aim = this._aimShip(hb.x, hb.y);
+            hb.update(aim.x, aim.y);
             if (hb.isOffScreen(CONFIG.canvas)) {
                 this.homingBullets[i] = this.homingBullets[this.homingBullets.length - 1];
                 this.homingBullets.pop();
@@ -1916,6 +1935,7 @@ escapeHtml(text) {
         for (let i = this.bullets.length - 1; i >= 0; i--) {
             const bullet = this.bullets[i];
             if (bullet.isPlayerBullet) continue;
+            if (this.player.health <= 0) continue;   // dead local ship is not a target (co-op: don't drain team combo/shield from the corpse)
 
             const dist = distance(bullet.x, bullet.y, this.player.x, this.player.y);
             if (dist < bullet.radius + this.player.size) {
@@ -1966,6 +1986,7 @@ escapeHtml(text) {
         // Player vs enemies (collision)
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const enemy = this.enemies[i];
+            if (this.player.health <= 0) continue;   // dead local ship doesn't ram enemies
             const dist = distance(this.player.x, this.player.y, enemy.x, enemy.y);
 
             if (dist < this.player.size + enemy.size) {
@@ -2063,6 +2084,7 @@ escapeHtml(text) {
         // Homing bullets vs player
         for (let i = this.homingBullets.length - 1; i >= 0; i--) {
             const hb = this.homingBullets[i];
+            if (this.player.health <= 0) continue;   // dead local ship is not a target
             if (distance(hb.x, hb.y, this.player.x, this.player.y) < hb.radius + this.player.size) {
                 this.homingBullets.splice(i, 1);
                 if (!this.player.invincible) {
@@ -2092,7 +2114,7 @@ escapeHtml(text) {
         }
 
         // Boss body vs player
-        if (this.boss && !this.player.invincible) {
+        if (this.boss && !this.player.invincible && this.player.health > 0) {
             if (this.boss.collidesWith(this.player.x, this.player.y, this.player.size)) {
                 this.soundManager.explosion(1.5);
                 this.soundManager.damageTaken();
@@ -2543,6 +2565,7 @@ closeStoryScreen() {
         if (m) m.textContent = text;
         // Freeze the frame underneath and hide the gameplay chrome.
         this.state = 'menu';
+        this._updateOrientationPrompt();   // hide the rotate hint over the message
         ['hud', 'active-bonuses', 'touch-controls'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.add('hidden');
@@ -2604,6 +2627,7 @@ closeStoryScreen() {
     _fireRemoteShip() {
         const ship = this.coopRemoteShip;
         if (!ship || ship.health <= 0) return;
+        if (ship._wantsFire === false) return;   // guest turned auto-fire off and isn't holding fire
         const bullets = ship.shoot(this.currentTime, !!this.activeBonuses.multiShot);
         if (!bullets) return;
         const list = Array.isArray(bullets) ? bullets : [bullets];
@@ -2659,13 +2683,16 @@ closeStoryScreen() {
         const s = this.player;
         const sup = !!this._coopSuperReq;
         this._coopSuperReq = false;   // send the request exactly once
-        return { x: s ? s.x : 0, y: s ? s.y : 0, firing: true, alive: !!(s && s.health > 0), super: sup };
+        // Report the guest's actual fire intent so the host can honor auto-fire OFF.
+        const firing = !!(GAME_SETTINGS.autoFire || this.keys['fire']);
+        return { x: s ? s.x : 0, y: s ? s.y : 0, firing, alive: !!(s && s.health > 0), super: sup };
     }
 
     coopApplyRemoteInput(msg) {
         this._lastRecvAt = Date.now();
         const ship = this.coopRemoteShip;   // host: the guest ship
         if (ship && typeof msg.x === 'number') { ship.x = msg.x; ship.y = msg.y; }
+        if (ship) ship._wantsFire = msg.firing !== false;   // honor the guest's auto-fire / fire-key choice
         // Guest fired ITS OWN super weapon -> run it on the guest's gauge, originating
         // at the guest ship.
         if (msg.super) this.activateSuperWeapon(this.superWeaponRemote, this.coopRemoteShip);
@@ -2673,11 +2700,11 @@ closeStoryScreen() {
 
     coopBuildSnapshot() {
         return {
-            ships: this.roster.players.map((s, i) => ({ i, x: s.x, y: s.y, health: s.health, alive: s.health > 0 })),
+            ships: this.roster.players.map((s, i) => ({ i, x: s.x, y: s.y, health: s.health, alive: s.health > 0, inv: !!s.invincible })),
             enemies: this.enemies.map(e => ({ type: e.typeName, x: e.x, y: e.y, hp: e.health })),
             bullets: this.bullets.map(b => ({ x: b.x, y: b.y, color: b.color, p: !!b.isPlayerBullet, et: b.enemyType })),
             homing: this.homingBullets.map(h => ({ x: h.x, y: h.y })),
-            boss: this.boss ? { x: this.boss.x, y: this.boss.y, hp: this.boss.health, maxHp: this.boss.maxHealth, size: this.boss.size, name: this.boss.name, phase: this.boss.phase } : null,
+            boss: this.boss ? { x: this.boss.x, y: this.boss.y, hp: this.boss.health, maxHp: this.boss.maxHealth, size: this.boss.size, name: this.boss.name, phase: this.boss.phase, design: this.boss.designIndex, color: this.boss.color } : null,
             pickups: this.bonusPickups.map(p => ({ x: p.x, y: p.y, type: p.type })),
             hud: { score: this.score, level: this.progressiveDifficulty.currentLevel, combo: this.combo, kills: this.killCount, over: this.state === 'gameOver',
                    wave: this.waveState.number,
@@ -2730,6 +2757,8 @@ closeStoryScreen() {
             const bo = this.boss; bo.x = msg.boss.x; bo.y = msg.boss.y; bo.health = msg.boss.hp; bo.maxHealth = msg.boss.maxHp; bo.size = msg.boss.size;
             if (msg.boss.name) bo.name = msg.boss.name;
             if (typeof msg.boss.phase === 'number') bo.phase = msg.boss.phase;
+            if (typeof msg.boss.design === 'number') bo.designIndex = msg.boss.design;   // draw the correct boss shape
+            if (msg.boss.color) bo.color = msg.boss.color;
         } else { this.boss = null; }
         // Boss HP bar: only touch the DOM when its state actually changes.
         const bossSig = this.boss ? `${this.boss.name}|${Math.round(this.boss.health)}|${this.boss.maxHealth}|${this.boss.phase}` : '';
@@ -2740,6 +2769,7 @@ closeStoryScreen() {
             const ship = this.roster.players[s.i];
             if (!ship) return;
             ship.health = s.health;
+            ship.invincible = !!s.inv;   // host-authoritative i-frames -> ship blinks on the guest too
             if (s.i !== localIdx) { ship.x = s.x; ship.y = s.y; }   // remote ship pos from host; own ship stays local
         });
 
@@ -2751,6 +2781,8 @@ closeStoryScreen() {
         for (const [k, rem] of Object.entries(bonusMap)) this.activeBonuses[k] = { startTime: nowB, duration: rem };
         const bonusSig = Object.keys(this.activeBonuses).sort().join(',');
         if (bonusSig !== this._coopBonusSig) { this._coopBonusSig = bonusSig; this.updateActiveBonusesUI(); }
+        // Match the guest's local fire-sound cadence to a synced team rapidFire.
+        CONFIG.player.fireRate = this.activeBonuses.rapidFire ? 75 : 150;
 
         if (msg.hud) {
             this.score = msg.hud.score; this.displayScore = msg.hud.score; this.combo = msg.hud.combo || 0; this.killCount = msg.hud.kills || 0;
@@ -2759,7 +2791,9 @@ closeStoryScreen() {
             this.superWeapon.charge = msg.hud.superCharge || 0;
             this.superWeapon.ready = !!msg.hud.superReady;
             this.superWeapon.active = !!msg.hud.superActive;
-            this.updateSuperWeaponUI();
+            // Only touch the gauge DOM when it changed (this runs ~30x/sec on the guest).
+            const superSig = this.superWeapon.charge + '|' + this.superWeapon.ready + '|' + this.superWeapon.active;
+            if (superSig !== this._coopSuperSig) { this._coopSuperSig = superSig; this.updateSuperWeaponUI(); }
             // Wave number (guest never runs the wave system).
             if (typeof msg.hud.wave === 'number') {
                 this.waveState.number = msg.hud.wave;
@@ -2786,7 +2820,9 @@ closeStoryScreen() {
                 this.updateDifficultyHUD();
             }
         }
-        this.updateHUD();
+        // Only rebuild the HUD when something it shows changed (runs ~30x/sec).
+        const hudSig = this.score + '|' + (this.player ? this.player.health : 0) + '|' + this.combo + '|' + this.killCount + '|' + !!this.activeBonuses.multiplier;
+        if (hudSig !== this._coopHudSig) { this._coopHudSig = hudSig; this.updateHUD(); }
         if (msg.hud && msg.hud.over && this.state === 'playing') this.gameOver();
     }
 

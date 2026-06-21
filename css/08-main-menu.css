@@ -277,6 +277,13 @@
 }
 @keyframes coop-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .coop-spinner { animation-duration: 2s; } }
+.coop-cancel {
+  margin-top: 6px; padding: 9px 22px; cursor: pointer;
+  background: transparent; color: var(--m-ink-dim);
+  border: 1px solid var(--m-line); border-radius: 10px;
+  font: 600 13px/1 'Exo 2', sans-serif; letter-spacing: .06em;
+}
+.coop-cancel:active { color: var(--m-ink); border-color: var(--m-teal); }
 
 /* ── Rotate-to-portrait prompt (co-op) ── */
 #rotate-screen {

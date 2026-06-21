@@ -34,12 +34,14 @@ export class CoopLobby {
       difficulty: id('coop-difficulty'),
       startBtn: id('coop-start-btn'),
       backBtn: id('coop-back-btn'),
+      cancelBtn: id('coop-cancel-btn'),
       error: id('coop-error'),
     };
     this.el.createBtn.addEventListener('click', () => this.createRoom());
     this.el.joinBtn.addEventListener('click', () => this.joinRoom());
     this.el.startBtn.addEventListener('click', () => this.hostStart());
     this.el.backBtn.addEventListener('click', () => this.leave());
+    if (this.el.cancelBtn) this.el.cancelBtn.addEventListener('click', () => this.leave());
     this.el.codeInput.addEventListener('input', () => {
       this.el.codeInput.value = this.el.codeInput.value.toUpperCase().slice(0, 4);
     });
@@ -177,20 +179,27 @@ export class CoopLobby {
     if (this.role === 'host') this.roomRef.onDisconnect().cancel();
     this._setConnecting(true);   // visible feedback while the link establishes (can take a few s)
 
-    const difficulty = this.role === 'host'
-      ? (this.el.difficulty.value || 'easy')
-      : ((await this.roomRef.child('difficulty').once('value')).val() || 'easy');
-    if (myGen !== this._gen) { this._setConnecting(false); return; }   // left during the difficulty fetch
+    try {
+      const difficulty = this.role === 'host'
+        ? (this.el.difficulty.value || 'easy')
+        : ((await this.roomRef.child('difficulty').once('value')).val() || 'easy');
+      if (myGen !== this._gen) { this._setConnecting(false); return; }   // left during the difficulty fetch
 
-    const transport = await connectCoop(this.db, this.code, role);
-    if (myGen !== this._gen) { this._setConnecting(false); try { transport.close(); } catch (e) {} return; }   // left during connect
+      const transport = await connectCoop(this.db, this.code, role);
+      if (myGen !== this._gen) { this._setConnecting(false); try { transport.close(); } catch (e) {} return; }   // left during connect
 
-    const world = this.game.makeCoopWorld(role);
-    const session = new CoopSession(transport, role, world);
-    const names = this.role === 'host'
-      ? `${this.myName || 'Host'} & ${this.partnerName || 'Guest'}`
-      : `${this.partnerName || 'Host'} & ${this.myName || 'Guest'}`;
-    this.game.beginCoop(session, role, difficulty, this.code, names);
+      const world = this.game.makeCoopWorld(role);
+      const session = new CoopSession(transport, role, world);
+      const names = this.role === 'host'
+        ? `${this.myName || 'Host'} & ${this.partnerName || 'Guest'}`
+        : `${this.partnerName || 'Host'} & ${this.myName || 'Guest'}`;
+      this.game.beginCoop(session, role, difficulty, this.code, names);
+    } catch (e) {
+      // Both transports failed (or RTDB read error): never leave the user stuck on
+      // the spinner — clear it and return to the menu (leave() cleans up the room).
+      this._setConnecting(false);
+      if (myGen === this._gen) this.leave();
+    }
   }
 
   _detach() {
