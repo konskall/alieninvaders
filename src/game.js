@@ -229,7 +229,7 @@ export class Game {
         this._lastWasCoop = false;
         this.state = 'menu';
         ['game-over-screen', 'pause-screen', 'settings-screen', 'story-screen',
-         'gallery-screen', 'hud', 'active-bonuses', 'touch-controls', 'leaderboard-modal']
+         'gallery-screen', 'coop-screen', 'hud', 'active-bonuses', 'touch-controls', 'leaderboard-modal']
             .forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.classList.add('hidden');

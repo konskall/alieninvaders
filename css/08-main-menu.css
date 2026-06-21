@@ -18,7 +18,8 @@
 #start-screen,
 #settings-screen,
 #game-over-screen,
-#pause-screen {
+#pause-screen,
+#coop-screen {
   background: radial-gradient(120% 75% at 50% -5%, #11243a 0%, #081120 42%, #03060c 100%);
   backdrop-filter: none;
 }
@@ -28,6 +29,7 @@
 #settings-screen::before,
 #game-over-screen::before,
 #pause-screen::before,
+#coop-screen::before,
 .share-dialog::before {
   content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .55;
   background-image:
@@ -42,6 +44,7 @@
 #settings-screen::after,
 #game-over-screen::after,
 #pause-screen::after,
+#coop-screen::after,
 .share-dialog::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .06;
   background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(120,230,242,.4) 3px 4px);
@@ -216,7 +219,18 @@
 /* ── Co-op lobby ── */
 #coop-choice { display: flex; flex-direction: column; gap: 8px; }
 #coop-waiting { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
-#coop-screen .coop-input { width: 100%; text-align: center; margin: 0; }
+/* id-styled blocks beat the global .hidden — restore hiding with id+class */
+#coop-choice.hidden, #coop-waiting.hidden, #coop-difficulty.hidden, #coop-start-btn.hidden { display: none; }
+#coop-screen .coop-input {
+  width: 100%; text-align: center; margin: 0;
+  background: rgba(10, 22, 34, 0.85);
+  border: 1px solid var(--m-line);
+  border-radius: 10px;
+  color: var(--m-ink);
+  padding: 12px 14px;
+  font-family: 'Exo 2', sans-serif;
+}
+#coop-screen .coop-input::placeholder { color: var(--m-ink-dim); }
 #coop-screen .coop-join-row { display: flex; gap: 8px; }
 #coop-screen .coop-join-row .coop-input { flex: 1; text-transform: uppercase; letter-spacing: .3em; font-family: 'Orbitron', sans-serif; }
 #coop-screen .coop-join { width: auto; padding: 0 18px; height: auto; }
