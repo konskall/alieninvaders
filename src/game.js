@@ -15,6 +15,7 @@ import { SoundManager } from './managers/SoundManager.js';
 import { VibrationManager } from './managers/VibrationManager.js';
 import { MusicManager } from './managers/MusicManager.js';
 import { GALLERY_ITEMS, GalleryManager } from './gallery.js';
+import { CoopRoster } from './coop/CoopRoster.js';
 // Main Game Class
 export class Game {
     constructor() {
@@ -103,7 +104,8 @@ export class Game {
         this.state = 'credits';
         this.settingsOpener = 'menu';
         this.score = 0;
-        this.player = null;
+        this.roster = new CoopRoster();
+        this.mode = 'solo';   // 'solo' | 'coopHost' | 'coopGuest' (set by later phases)
         this.enemies = [];
         this.bullets = [];
         this.particles = [];
@@ -120,7 +122,13 @@ export class Game {
         this.loadSettings();
         this.gameLoop();
     }
-    
+
+    // Local player accessor — all existing `this.player.*` reads resolve here.
+    // `this.player` is intentionally read-only now; assign via `this.roster`.
+    get player() {
+        return this.roster.local;
+    }
+
     loadSettings() {
         // Calculate automatic sensitivity based on screen size
         this.calculateAutoSensitivity();
@@ -846,11 +854,12 @@ export class Game {
         
         // Reset screen shake
         this.screenShake = { x: 0, y: 0, intensity: 0 };
-        
-        this.player = new Player(
+
+        this.roster.reset();
+        this.roster.setLocal(new Player(
             CONFIG.canvas.width / 2,
             CONFIG.canvas.height - 100
-        );
+        ));
 
         document.getElementById('start-screen').classList.add('hidden');
         document.getElementById('game-over-screen').classList.add('hidden');
