@@ -150,14 +150,16 @@ export class Game {
         });
         
         // Show credits splash screen, then auto-transition to the main menu
+        const creditsShownAt = Date.now();
         setTimeout(() => {
             this.transitionFromCreditsToMenu();
         }, 10000);
-        
-        // Allow click to skip credits
+
+        // Allow tap to skip — but ignore stray taps during the opening so the
+        // cinematic intro (warp -> reveal -> title) always plays first.
         const creditsScreen = document.getElementById('credits-screen');
         creditsScreen.addEventListener('click', () => {
-            if (this.state === 'credits') {
+            if (this.state === 'credits' && Date.now() - creditsShownAt > 1500) {
                 this.transitionFromCreditsToMenu();
             }
         });

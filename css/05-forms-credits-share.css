@@ -172,84 +172,8 @@
   margin-left: var(--space-8);
 }
 
-/* Credits Splash Screen */
-.credits-splash {
-  text-align: center;
-  animation: credits-fade-in 1s ease-out;
-}
-
-@keyframes credits-fade-in {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.credits-title {
-  font-size: var(--font-size-4xl);
-  margin-bottom: var(--space-32);
-  color: #00FFFF;
-  text-shadow: 0 0 20px #0088BB, 0 0 40px #0066AA, 0 0 60px #004488;
-  animation: neon-pulse 2s ease-in-out infinite;
-}
-
-.credits-creator {
-  margin: var(--space-32) 0;
-  padding: var(--space-24);
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: var(--radius-lg);
-  border: 2px solid #00FFFF;
-  box-shadow: 0 0 20px #00FFFF, inset 0 0 20px rgba(0, 255, 255, 0.2);
-}
-
-.created-by {
-  color: #88DDFF;
-  font-size: var(--font-size-lg);
-  margin: 0 0 var(--space-12) 0;
-  text-shadow: 0 0 15px #0066AA, 0 0 25px #004488;
-}
-
-.creator-name-large {
-  font-size: 56px;
-  font-weight: var(--font-weight-bold);
-  color: #FFFFFF;
-  margin: 0;
-  text-shadow: 0 0 30px #00FFFF, 0 0 50px #00CCCC, 0 0 70px #0099AA, 0 0 90px #006688;
-  animation: neon-pulse-bright 2s ease-in-out infinite;
-  letter-spacing: 2px;
-}
-
-.credits-subtitle {
-  font-size: var(--font-size-xl);
-  color: #00DDFF;
-  margin-top: var(--space-24);
-  text-shadow: 0 0 15px #0077BB, 0 0 30px #005588;
-  animation: neon-pulse 2s ease-in-out infinite;
-}
-
-@keyframes neon-pulse {
-  0%, 100% {
-    text-shadow: 0 0 20px #0088BB, 0 0 40px #0066AA, 0 0 60px #004488;
-  }
-  50% {
-    text-shadow: 0 0 30px #00AADD, 0 0 50px #0088BB, 0 0 70px #0066AA;
-  }
-}
-
-@keyframes neon-pulse-bright {
-  0%, 100% {
-    text-shadow: 0 0 30px #00FFFF, 0 0 50px #00CCCC, 0 0 70px #0099AA, 0 0 90px #006688;
-    transform: scale(1);
-  }
-  50% {
-    text-shadow: 0 0 40px #00FFFF, 0 0 70px #00DDDD, 0 0 100px #00BBBB, 0 0 130px #0099AA;
-    transform: scale(1.02);
-  }
-}
+/* (Old neon "Credits Splash" styles removed — the splash is now the
+   cinematic intro in css/09-credits-splash.css.) */
 
 /* Share Dialog */
 .share-dialog {

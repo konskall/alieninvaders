@@ -1,0 +1,119 @@
+/* ============================================================
+   CREDITS / SPLASH — cinematic "Arrival" intro
+   warp hyperspace -> mothership key-art reveal -> title.
+   All classes namespaced cs-* and keyframes cs-* to avoid collisions.
+   ============================================================ */
+
+/* deep-space backdrop (override the generic .screen scrim for credits) */
+#credits-screen { background: #03060c; backdrop-filter: none; }
+
+/* warp starfield (intro layer, behind the key-art) */
+.cs-warp { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+
+/* hero key-art, revealed as the warp settles */
+.cs-keyart {
+  position: absolute; inset: 0; z-index: 1;
+  background: url("../Gallery/mothership.png") center 36% / cover no-repeat;
+  transform: scale(1.06); opacity: 0;
+  animation: cs-artReveal 1.3s ease-out 1.15s forwards, cs-kenburns 26s ease-out 1.6s forwards;
+  will-change: transform, opacity;
+}
+@keyframes cs-artReveal { from { opacity: 0; transform: scale(1.16); } to { opacity: 1; transform: scale(1.06); } }
+@keyframes cs-kenburns { from { transform: scale(1.06) translateY(0); } to { transform: scale(1.15) translateY(-1.5%); } }
+
+.cs-scrim {
+  position: absolute; inset: 0; z-index: 2;
+  background:
+    radial-gradient(120% 90% at 50% 30%, transparent 38%, rgba(3,6,12,.55) 100%),
+    linear-gradient(to bottom, rgba(3,6,12,.82) 0%, rgba(3,6,12,.30) 24%, rgba(3,6,12,.12) 46%, rgba(3,6,12,.55) 70%, rgba(3,6,12,.94) 100%);
+}
+.cs-scanlines {
+  position: absolute; inset: 0; z-index: 3;
+  background-image: repeating-linear-gradient(to bottom, rgba(103,232,242,.05) 0px, rgba(103,232,242,.05) 1px, transparent 1px, transparent 4px);
+  mix-blend-mode: screen; opacity: .5; pointer-events: none;
+}
+.cs-sweep {
+  position: absolute; left: -40%; top: 0; width: 40%; height: 100%; z-index: 4;
+  background: linear-gradient(100deg, transparent, rgba(103,232,242,.10), transparent);
+  transform: skewX(-12deg); animation: cs-sweep 9s ease-in-out 3s infinite; pointer-events: none;
+}
+@keyframes cs-sweep { 0% { left: -45%; opacity: 0; } 12% { opacity: 1; } 40% { left: 120%; opacity: 0; } 100% { left: 120%; opacity: 0; } }
+
+.cs-hud { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.cs-corner {
+  position: absolute; width: 46px; height: 46px; border: 2px solid var(--m-teal-bright, #67e8f2);
+  opacity: 0; filter: drop-shadow(0 0 6px rgba(103,232,242,.6)); animation: cs-hudIn .9s ease-out 1.7s forwards;
+}
+.cs-corner.tl { top: 18px; left: 18px; border-right: none; border-bottom: none; }
+.cs-corner.tr { top: 18px; right: 18px; border-left: none; border-bottom: none; }
+.cs-corner.bl { bottom: 18px; left: 18px; border-right: none; border-top: none; }
+.cs-corner.br { bottom: 18px; right: 18px; border-left: none; border-top: none; }
+@keyframes cs-hudIn { from { opacity: 0; transform: scale(.6); } to { opacity: .9; transform: scale(1); } }
+
+.cs-content {
+  position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center;
+  padding: clamp(40px,9vh,72px) 24px max(clamp(26px,5vh,40px), env(safe-area-inset-bottom)); text-align: center;
+}
+
+.cs-eyebrow {
+  margin-top: clamp(20px,7vh,60px); font-family: "Exo 2", sans-serif; font-size: 11px; font-weight: 600;
+  letter-spacing: .42em; text-transform: uppercase; color: #67e8f2; display: flex; align-items: center; gap: 10px;
+  opacity: 0; animation: cs-rise .8s ease-out 1.95s forwards;
+}
+.cs-eyebrow .cs-dot { width: 6px; height: 6px; border-radius: 50%; background: #67e8f2; box-shadow: 0 0 8px #67e8f2; animation: cs-blip 1.8s ease-in-out infinite; }
+@keyframes cs-blip { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+.cs-eyebrow .cs-rule { width: 26px; height: 1px; background: linear-gradient(to right, transparent, #32b8c6); }
+.cs-eyebrow .cs-rule.right { background: linear-gradient(to left, transparent, #32b8c6); }
+
+.cs-wordmark { margin-top: 18px; font-family: "Orbitron", sans-serif; line-height: .92; text-transform: uppercase; }
+.cs-wordmark .cs-line {
+  display: block; font-weight: 900; font-size: clamp(46px,15vw,72px); letter-spacing: .04em; color: #e8f7fa;
+  text-shadow: 0 0 1px rgba(232,247,250,.9), 0 0 18px rgba(103,232,242,.55), 0 0 42px rgba(50,184,198,.40);
+}
+.cs-wordmark .cs-line.invaders {
+  font-weight: 800; color: #67e8f2;
+  text-shadow: 0 0 2px rgba(103,232,242,.9), 0 0 22px rgba(103,232,242,.6), 0 0 54px rgba(50,184,198,.5);
+}
+.cs-wordmark .cs-line.alien { opacity: 0; animation: cs-rise .9s cubic-bezier(.2,.7,.2,1) 2.1s forwards; }
+.cs-wordmark .cs-line.invaders { opacity: 0; animation: cs-rise .9s cubic-bezier(.2,.7,.2,1) 2.27s forwards; }
+
+.cs-tagline {
+  margin-top: 22px; max-width: 18em; font-family: "Exo 2", sans-serif; font-size: clamp(13px,3.6vw,15px);
+  font-weight: 500; line-height: 1.5; letter-spacing: .02em; color: #e8f7fa; text-shadow: 0 1px 12px rgba(3,6,12,.9);
+  opacity: 0; animation: cs-rise .9s ease-out 2.5s forwards;
+}
+
+.cs-spacer { flex: 1 1 auto; }
+
+.cs-start {
+  margin-top: clamp(18px,4vh,30px); font-family: "Exo 2", sans-serif; font-size: 13px; font-weight: 600;
+  letter-spacing: .26em; text-transform: uppercase; color: #67e8f2;
+  opacity: 0; animation: cs-rise .8s ease-out 2.95s forwards, cs-pulse 2.4s ease-in-out 3.75s infinite;
+}
+.cs-start::before, .cs-start::after {
+  content: ""; display: inline-block; width: 18px; height: 1px; vertical-align: middle; margin: 0 12px; background: #32b8c6; opacity: .7;
+}
+
+.cs-credits { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: clamp(14px,3vh,22px); opacity: 0; animation: cs-rise 1s ease-out 3.3s forwards; }
+.cs-dedication {
+  font-family: "Exo 2", sans-serif; font-size: clamp(15px,4.3vw,18px); font-weight: 500; font-style: italic; letter-spacing: .02em;
+  color: #ffce6b; text-shadow: 0 0 16px rgba(255,206,107,.45), 0 1px 8px rgba(3,6,12,.8);
+}
+.cs-dedication .cs-glyph { display: inline-block; vertical-align: middle; margin: 0 6px; opacity: .9; }
+.cs-created { font-family: "Exo 2", sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: .32em; text-transform: uppercase; color: #7fa3ad; display: flex; align-items: center; gap: 9px; }
+.cs-created .cs-sep { color: #32b8c6; }
+.cs-created .cs-name { color: #e8f7fa; font-weight: 700; letter-spacing: .18em; text-decoration: none; cursor: pointer; transition: color .2s ease, text-shadow .2s ease; }
+.cs-created a.cs-name:hover, .cs-created a.cs-name:focus-visible { color: #67e8f2; text-shadow: 0 0 10px rgba(103,232,242,.55); outline: none; }
+
+@keyframes cs-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes cs-pulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-warp { display: none; }
+  .cs-keyart { animation: none; opacity: 1; transform: scale(1.04); }
+  .cs-sweep { display: none; }
+  .cs-eyebrow .cs-dot { animation: none; }
+  .cs-corner, .cs-eyebrow, .cs-wordmark .cs-line, .cs-tagline, .cs-credits, .cs-start { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .cs-corner { opacity: .9; }
+  .cs-start { animation: cs-pulse 3s ease-in-out infinite !important; }
+}
