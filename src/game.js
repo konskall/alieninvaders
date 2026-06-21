@@ -692,12 +692,14 @@ export class Game {
             // OPTIMIZED: Direct assignment - no smoothing
             this.touchState.directionX = baseDirX * totalSensitivity;
             this.touchState.directionY = baseDirY * totalSensitivity;
-            
-            // OPTIMIZED: Higher clamp threshold for faster movement
+
+            // Max move speed scales with the user's sensitivity setting, so the
+            // slider has a real effect (default 5.0 -> 2.5, the previous feel).
+            const maxMag = GAME_SETTINGS.joystickSensitivity * 0.5;
             const magnitude = Math.sqrt(this.touchState.directionX ** 2 + this.touchState.directionY ** 2);
-            if (magnitude > 2.5) {
-                this.touchState.directionX = (this.touchState.directionX / magnitude) * 2.5;
-                this.touchState.directionY = (this.touchState.directionY / magnitude) * 2.5;
+            if (magnitude > maxMag) {
+                this.touchState.directionX = (this.touchState.directionX / magnitude) * maxMag;
+                this.touchState.directionY = (this.touchState.directionY / magnitude) * maxMag;
             }
         } else {
             this.touchState.directionX = 0;
@@ -744,12 +746,14 @@ export class Game {
         
         this.touchState.directionX = baseDirX * totalSensitivity;
         this.touchState.directionY = baseDirY * totalSensitivity;
-        
-        // OPTIMIZED: Higher clamp for faster movement
+
+        // Max move speed scales with the user's sensitivity setting, so the
+        // slider has a real effect (default 5.0 -> 2.0, the previous feel).
+        const maxMag = GAME_SETTINGS.joystickSensitivity * 0.4;
         const magnitude = Math.sqrt(this.touchState.directionX ** 2 + this.touchState.directionY ** 2);
-        if (magnitude > 2.0) {
-            this.touchState.directionX = (this.touchState.directionX / magnitude) * 2.0;
-            this.touchState.directionY = (this.touchState.directionY / magnitude) * 2.0;
+        if (magnitude > maxMag) {
+            this.touchState.directionX = (this.touchState.directionX / magnitude) * maxMag;
+            this.touchState.directionY = (this.touchState.directionY / magnitude) * maxMag;
         }
     }
     

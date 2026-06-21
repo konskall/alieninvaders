@@ -1,18 +1,28 @@
 /* ============================================================
-   Smooth screen transitions — every screen fades in when shown.
-   Screens toggle via display:none (.hidden), so we trigger a CSS
-   animation whenever a .screen starts matching :not(.hidden).
-   (Modals already fade in via .modal's own animation.)
+   Smooth screen transitions + mobile crispness.
+   The screen fade-in (opacity animation) is applied ONLY on precise-
+   pointer / desktop devices — on touch / high-DPI mobile, animating the
+   opacity of a full screen rasterizes its text fuzzily, so screens swap
+   instantly there (crisp). Modals keep their own fade.
    ============================================================ */
 @keyframes ui-screen-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
-.screen:not(.hidden) {
-  animation: ui-screen-in 0.35s ease both;
+@media (hover: hover) and (pointer: fine) {
+  .screen:not(.hidden) {
+    animation: ui-screen-in 0.35s ease both;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .screen:not(.hidden) { animation: none; }
 }
+
+/* No backdrop blur anywhere — it renders fuzzy and is costly on mobile,
+   and the redesigned screens don't use it. */
+#story-screen,
+#gallery-screen { backdrop-filter: none; }
+#gallery-screen { background: rgba(3, 6, 12, 0.72); }
+.hud-item { backdrop-filter: none; }
