@@ -1606,7 +1606,15 @@ escapeHtml(text) {
         }
 
         // Co-op guest does not simulate — it renders host snapshots (own ship moves in handleInput).
-        if (this.mode === 'coopGuest') return;
+        // BUT its own ship still needs update() each frame: handleInput keeps adding
+        // trail particles via move(), and only update() decays/removes them. Without
+        // this the guest's trail particles accumulate forever (permanent trail).
+        if (this.mode === 'coopGuest') {
+            for (const ship of this.roster.players) {
+                if (ship) ship.update();
+            }
+            return;
+        }
         // Co-op host: the remote (guest) ship auto-fires too.
         if (this.mode === 'coopHost') this._fireRemoteShip();
 
