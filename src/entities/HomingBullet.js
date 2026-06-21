@@ -1,3 +1,5 @@
+import { CONFIG } from '../config.js';
+
 // HomingBullet Class
 export class HomingBullet {
     constructor(x, y, targetX, targetY) {
@@ -55,7 +57,7 @@ export class HomingBullet {
             ctx.fill();
         });
         ctx.globalAlpha = 1;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = CONFIG.lowFX ? 0 : 15;
         ctx.shadowColor = '#FF00AA';
         const pulse = 1 + Math.sin(this.pulsePhase) * 0.25;
         ctx.fillStyle = '#FF00AA';
@@ -63,7 +65,7 @@ export class HomingBullet {
         ctx.arc(this.x, this.y, this.radius * pulse, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#FFFFFF';
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = CONFIG.lowFX ? 0 : 4;
         ctx.beginPath();
         ctx.arc(this.x, this.y, 2.5, 0, Math.PI * 2);
         ctx.fill();

@@ -1,0 +1,20 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "leaderboard": {
+      ".read": true,
+      "$entry": {
+        ".write": "!data.exists()",
+        ".validate": "newData.hasChildren(['name','score','level'])",
+        "name":      { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20" },
+        "score":     { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000000" },
+        "level":     { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000" },
+        "date":      { ".validate": "newData.isString() && newData.val().length <= 24" },
+        "timestamp": { ".validate": "newData.isNumber()" },
+        "id":        { ".validate": "newData.isString() && newData.val().length <= 64" },
+        "$other":    { ".validate": false }
+      }
+    }
+  }
+}

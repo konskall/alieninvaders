@@ -245,7 +245,7 @@
 #active-bonuses {
   position: absolute;
   top: 80px;
-  right: calc(50% - 355px);
+  right: max(10px, calc(50% - 355px));   /* clamp so it never lands off-screen on 481-767px widths */
   z-index: 6;
   pointer-events: none;
 }

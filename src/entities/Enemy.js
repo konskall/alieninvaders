@@ -110,14 +110,14 @@ export class Enemy {
         return;  // ← ΔΕΝ σχεδιάζει τον εχθρό
     }
 
-    if (this.x < -150 || this.x > 1350 ||
-        this.y < -150 || this.y > 850) {
+    if (this.x < -150 || this.x > CONFIG.canvas.width + 150 ||
+        this.y < -150 || this.y > CONFIG.canvas.height + 150) {
         return;  // ← ΔΕΝ σχεδιάζει τον εχθρό που είναι έξω από screen
     }
 		this.pulsePhase += 0.05;
 
         ctx.save();
-        ctx.shadowBlur = 15 + Math.sin(this.pulsePhase) * 5;
+        ctx.shadowBlur = CONFIG.lowFX ? 0 : 15 + Math.sin(this.pulsePhase) * 5;
         ctx.shadowColor = this.color;
         ctx.fillStyle = this.color;
         ctx.strokeStyle = '#FFFFFF';
@@ -154,7 +154,7 @@ export class Enemy {
 
             // Glowing core
             ctx.fillStyle = '#00FFFF';
-            ctx.shadowBlur = 20;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 20;
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size * 0.25, 0, Math.PI * 2);
             ctx.fill();
@@ -178,7 +178,7 @@ export class Enemy {
 
             // Weapon pods with glow
             ctx.fillStyle = '#CC0000';
-            ctx.shadowBlur = 15;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 15;
             ctx.shadowColor = '#FF0000';
             ctx.fillRect(this.x - this.size * 0.7, this.y, this.size * 0.25, this.size * 0.45);
             ctx.fillRect(this.x + this.size * 0.45, this.y, this.size * 0.25, this.size * 0.45);
@@ -200,7 +200,7 @@ export class Enemy {
 
             // Layered armor plates
             ctx.fillStyle = '#6B008B';
-            ctx.shadowBlur = 10;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 10;
             ctx.fillRect(this.x - this.size * 0.5, this.y - this.size * 0.4, this.size * 0.45, this.size * 0.35);
             ctx.fillRect(this.x + this.size * 0.05, this.y - this.size * 0.4, this.size * 0.45, this.size * 0.35);
             ctx.fillRect(this.x - this.size * 0.3, this.y + this.size * 0.1, this.size * 0.6, this.size * 0.3);
@@ -212,7 +212,7 @@ export class Enemy {
 
             // Golden accent lights
             ctx.fillStyle = '#FFD700';
-            ctx.shadowBlur = 20;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 20;
             ctx.shadowColor = '#FFD700';
             for (let i = 0; i < 3; i++) {
                 ctx.beginPath();
@@ -225,7 +225,7 @@ export class Enemy {
             ctx.lineWidth = 4;
 
             // Massive central core
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 8;
             ctx.fillRect(this.x - this.size * 0.5, this.y - this.size * 0.4, this.size, this.size * 1.3);
             ctx.strokeRect(this.x - this.size * 0.5, this.y - this.size * 0.4, this.size, this.size * 1.3);
 
@@ -254,7 +254,7 @@ export class Enemy {
             // Pulsing energy core
             const coreGlow = 0.6 + Math.sin(this.pulsePhase) * 0.4;
             ctx.fillStyle = `rgba(255, 0, 255, ${coreGlow})`;
-            ctx.shadowBlur = 40;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 40;
             ctx.shadowColor = '#FF00FF';
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size * 0.35, 0, Math.PI * 2);
@@ -262,7 +262,7 @@ export class Enemy {
 
             // Weak point indicators
             ctx.fillStyle = '#00FFFF';
-            ctx.shadowBlur = 25;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 25;
             ctx.shadowColor = '#00FFFF';
             for (let i = 0; i < 4; i++) {
                 const angle = (Math.PI * 2 / 4) * i + this.pulsePhase;
@@ -303,7 +303,7 @@ export class Enemy {
             // Glowing eye
             const eyeGlow = 0.5 + Math.sin(this.pulsePhase * 2) * 0.5;
             ctx.fillStyle = `rgba(255, 200, 255, ${eyeGlow})`;
-            ctx.shadowBlur = 20;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 20;
             ctx.shadowColor = '#FF00AA';
             ctx.beginPath();
             ctx.arc(this.x, this.y - this.size * 0.1, this.size * 0.22, 0, Math.PI * 2);
@@ -329,7 +329,7 @@ export class Enemy {
 
             // Inner void core (darker)
             ctx.fillStyle = '#330011';
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 0;
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size * 0.4, 0, Math.PI * 2);
             ctx.fill();
@@ -337,7 +337,7 @@ export class Enemy {
             // Pulsing red core
             const coreAlpha = 0.6 + Math.sin(this.pulsePhase * 4) * 0.4;
             ctx.fillStyle = `rgba(255, 0, 102, ${coreAlpha})`;
-            ctx.shadowBlur = 30;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 30;
             ctx.shadowColor = '#FF0066';
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size * 0.2, 0, Math.PI * 2);
@@ -376,7 +376,7 @@ export class Enemy {
 
             // Bright energy core
             ctx.fillStyle = '#FFFFFF';
-            ctx.shadowBlur = 20;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 20;
             ctx.shadowColor = '#CCCCFF';
             ctx.beginPath();
             ctx.arc(this.x, this.y + this.size * 0.1, this.size * 0.2, 0, Math.PI * 2);
@@ -421,7 +421,7 @@ export class Enemy {
 
             // Golden core
             ctx.fillStyle = '#FFD700';
-            ctx.shadowBlur = 18;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 18;
             ctx.shadowColor = '#FFAA00';
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size * 0.28, 0, Math.PI * 2);
@@ -435,7 +435,7 @@ export class Enemy {
             const barHeight = 3;
             const barY = this.y - this.size - 10;
 
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 0;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(this.x - barWidth / 2, barY, barWidth, barHeight);
 
@@ -452,7 +452,7 @@ export class Enemy {
             ctx.save();
             ctx.globalAlpha = (this.hitFlash / 4) * 0.7;
             ctx.fillStyle = '#FFFFFF';
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 0;
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size * 1.15, 0, Math.PI * 2);
             ctx.fill();

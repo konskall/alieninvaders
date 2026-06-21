@@ -3,7 +3,6 @@ export class VibrationManager {
     constructor() {
         this.enabled = true;
         this.supported = this.checkVibrationSupport();
-        console.log('Vibration supported:', this.supported);
     }
 
     checkVibrationSupport() {
@@ -13,12 +12,10 @@ export class VibrationManager {
 
     vibrate(pattern) {
         if (!this.enabled) {
-            console.log('Vibration disabled in settings');
             return;
         }
 
         if (!this.supported) {
-            console.log('Vibration not supported on this device');
             return;
         }
 
@@ -26,19 +23,16 @@ export class VibrationManager {
             // Convert to array if single number
             const vibratePattern = Array.isArray(pattern) ? pattern : [pattern];
 
-            console.log('Attempting vibration with pattern:', vibratePattern);
 
             // Try standard vibration API
             if ('vibrate' in navigator) {
                 const result = navigator.vibrate(vibratePattern);
-                console.log('Vibration result:', result);
                 return;
             }
 
             // Try webkit prefixed version (older iOS)
             if ('webkitVibrate' in navigator) {
                 const result = navigator.webkitVibrate(vibratePattern);
-                console.log('WebKit vibration result:', result);
                 return;
             }
         } catch (e) {
@@ -55,12 +49,10 @@ export class VibrationManager {
     }
 
     damage() {
-        console.log('Damage vibration triggered');
         this.vibrate([300]);
     }
 
     superWeapon() {
-        console.log('Super weapon vibration triggered');
         this.vibrate([100, 50, 100]);
     }
 
@@ -69,7 +61,6 @@ export class VibrationManager {
     }
 
     bonus() {
-        console.log('Bonus vibration triggered');
         this.vibrate([50, 50, 50]);
     }
 }

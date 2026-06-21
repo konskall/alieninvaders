@@ -16,8 +16,8 @@
 /* Joystick Zone - MOVED TO BOTTOM RIGHT */
 #joystick-zone {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  right: calc(10px + env(safe-area-inset-right));
+  bottom: calc(10px + env(safe-area-inset-bottom));
   width: 160px;
   height: 160px;
   pointer-events: all;
@@ -62,8 +62,8 @@
 /* Super Weapon Zone - REPLACES FIRE BUTTON */
 #super-weapon-zone {
   position: absolute;
-  left: calc(50% - 355px);
-  bottom: 60px;
+  left: max(10px, calc(50% - 355px));   /* clamp so the button never goes off-screen on narrow widths */
+  bottom: calc(60px + env(safe-area-inset-bottom));
   width: 110px;
   height: 110px;
   pointer-events: all;

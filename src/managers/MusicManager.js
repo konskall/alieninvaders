@@ -94,12 +94,16 @@ export class MusicManager {
     }
 
     _hihat(time, vol) {
-        const bufSize = Math.floor(this.ctx.sampleRate * 0.05);
-        const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
-        const data = buf.getChannelData(0);
-        for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+        // Build the noise buffer once and reuse it (avoids per-beat GC churn).
+        if (!this._hihatBuffer) {
+            const bufSize = Math.floor(this.ctx.sampleRate * 0.05);
+            const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+            const data = buf.getChannelData(0);
+            for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+            this._hihatBuffer = buf;
+        }
         const src = this.ctx.createBufferSource();
-        src.buffer = buf;
+        src.buffer = this._hihatBuffer;
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'highpass';
         filter.frequency.value = 7000;

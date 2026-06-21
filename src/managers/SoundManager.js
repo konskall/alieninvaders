@@ -11,7 +11,6 @@ export class SoundManager {
     initAudioContext() {
         try {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            console.log('AudioContext created, state:', this.audioContext.state);
         } catch (e) {
             console.warn('Web Audio API not supported:', e);
         }
@@ -22,9 +21,7 @@ export class SoundManager {
 
         // Resume audio context if suspended (iOS requirement)
         if (this.audioContext.state === 'suspended') {
-            console.log('Resuming suspended audio context...');
             this.audioContext.resume().then(() => {
-                console.log('Audio context resumed successfully');
                 this.initialized = true;
             }).catch(e => {
                 console.warn('Failed to resume audio context:', e);
@@ -40,7 +37,6 @@ export class SoundManager {
         if (!this.enabled || !this.audioContext) return;
 
         if (!this.ensureAudioContext()) {
-            console.log('Audio context not ready yet');
             return;
         }
 
@@ -70,21 +66,26 @@ export class SoundManager {
             const now = this.audioContext.currentTime;
 
             layers.forEach(layer => {
-                const osc = this.audioContext.createOscillator();
                 const gain = this.audioContext.createGain();
-
-                osc.connect(gain);
                 gain.connect(this.audioContext.destination);
 
-                osc.type = layer.type || 'sine';
-
-                // Frequency sweep if specified
-                if (layer.freqStart && layer.freqEnd) {
-                    osc.frequency.setValueAtTime(layer.freqStart, now);
-                    osc.frequency.exponentialRampToValueAtTime(layer.freqEnd, now + duration);
+                // 'noise' is not a valid OscillatorNode type — use a noise BufferSource.
+                let source;
+                if (layer.type === 'noise') {
+                    source = this.audioContext.createBufferSource();
+                    source.buffer = this._getNoiseBuffer();
+                    source.loop = true;
                 } else {
-                    osc.frequency.value = layer.freq;
+                    source = this.audioContext.createOscillator();
+                    source.type = layer.type || 'sine';
+                    if (layer.freqStart && layer.freqEnd) {
+                        source.frequency.setValueAtTime(layer.freqStart, now);
+                        source.frequency.exponentialRampToValueAtTime(layer.freqEnd, now + duration);
+                    } else {
+                        source.frequency.value = layer.freq;
+                    }
                 }
+                source.connect(gain);
 
                 // ADSR envelope
                 const attack = layer.attack || 0.01;
@@ -98,12 +99,23 @@ export class SoundManager {
                 gain.gain.setValueAtTime(sustain, now + duration - release);
                 gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
-                osc.start(now);
-                osc.stop(now + duration);
+                source.start(now);
+                source.stop(now + duration);
             });
         } catch (e) {
             console.warn('Layered audio error:', e);
         }
+    }
+
+    // Cached 1s white-noise buffer (created once, reused for every noise layer).
+    _getNoiseBuffer() {
+        if (this._noiseBuffer) return this._noiseBuffer;
+        const sr = this.audioContext.sampleRate;
+        const buf = this.audioContext.createBuffer(1, sr, sr);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        this._noiseBuffer = buf;
+        return buf;
     }
 
    playerShoot() {

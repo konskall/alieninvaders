@@ -1,3 +1,5 @@
+import { CONFIG } from '../config.js';
+
 // Bullet Class
 export class Bullet {
     constructor(x, y, velocityX, velocityY, color, isPlayerBullet = true, enemyType = null) {
@@ -28,7 +30,7 @@ export class Bullet {
     draw(ctx) {
         if (this.isPlayerBullet) {
             ctx.save();
-            ctx.shadowBlur = 10;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 10;
             ctx.shadowColor = this.color;
             ctx.fillStyle = this.color;
             ctx.beginPath();
@@ -46,7 +48,7 @@ export class Bullet {
         // Draw trail
         this.trail.forEach((t, i) => {
             ctx.globalAlpha = t.life * 0.4;
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 8;
             ctx.shadowColor = this.color;
             ctx.fillStyle = this.color;
             const size = this.radius * 0.6 * t.life;
@@ -60,7 +62,7 @@ export class Bullet {
         if (this.enemyType === 'scout_drone') {
             // Small energetic cyan dot with glow
             const pulse = 1 + Math.sin(this.pulsePhase) * 0.3;
-            ctx.shadowBlur = 8 * pulse;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 8 * pulse;
             ctx.shadowColor = '#00FFFF';
 
             const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, 6 * pulse);
@@ -74,7 +76,7 @@ export class Bullet {
             ctx.fill();
         } else if (this.enemyType === 'fighter_wasp') {
             // Medium orange/red plasma bolt
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 8;
             ctx.shadowColor = '#FF6600';
 
             const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, 8);
@@ -99,7 +101,7 @@ export class Bullet {
             ctx.fill();
         } else if (this.enemyType === 'heavy_cruiser') {
             // Large heavy projectile with yellow core
-            ctx.shadowBlur = 6;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 6;
             ctx.shadowColor = '#FFFF00';
 
             // Outer dark layer
@@ -116,13 +118,13 @@ export class Bullet {
             // Yellow core
             const pulse = 0.7 + Math.sin(this.pulsePhase) * 0.3;
             ctx.fillStyle = '#FFFF00';
-            ctx.shadowBlur = 40;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 40;
             ctx.beginPath();
             ctx.arc(this.x, this.y, 5 * pulse, 0, Math.PI * 2);
             ctx.fill();
         } else if (this.enemyType === 'behemoth_dreadnought' || this.enemyType === 'alien_leviathan' || this.enemyType === 'void_entity' || this.enemyType === 'elite_guardian' || this.enemyType === 'swarm_commander') {
             // Epic massive projectile
-            ctx.shadowBlur = 5;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 5;
             ctx.shadowColor = '#FF00FF';
 
             const pulse = 1 + Math.sin(this.pulsePhase) * 0.2;
@@ -158,7 +160,7 @@ export class Bullet {
             }
         } else {
             // Default enemy projectile
-            ctx.shadowBlur = 15;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 15;
             ctx.shadowColor = this.color;
             ctx.fillStyle = this.color;
             ctx.beginPath();

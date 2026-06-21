@@ -98,6 +98,23 @@
   /* Animation */
   --duration-normal: 250ms;
   --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Globalized tokens — defined here (first stylesheet) so files that load
+     before their original definition (05 share dialog, 03/04 HUD) resolve them. */
+  --font-size-sm: 12px;
+  --space-1: 1px;
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-10: 10px;
+  /* Console design tokens (also duplicated in 08-main-menu.css) */
+  --m-teal: #32b8c6;
+  --m-teal-bright: #67e8f2;
+  --m-teal-deep: #15535e;
+  --m-line: rgba(50, 184, 198, .30);
+  --m-ink: #e8f7fa;
+  --m-ink-dim: #7fa3ad;
+  --m-gold: #ffce6b;
+  --m-row-h: 60px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -153,9 +170,10 @@ body {
 }
 
 #game-container {
-  position: flex;                    /* ← Αλλάξτε από relative σε fixed */                           /* ← Προσθέστε */
+  position: relative;
   width: 100vw;
-  height: 100vh;
+  height: 100vh;          /* fallback for browsers without dvh */
+  height: 100dvh;         /* avoids the iOS Safari address-bar 100vh bug */
   display: flex;
   align-items: center;
   justify-content: center;

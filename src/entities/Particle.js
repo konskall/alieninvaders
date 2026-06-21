@@ -1,4 +1,5 @@
 import { randomRange } from '../utils.js';
+import { CONFIG } from '../config.js';
 
 export class Particle {
     constructor(x, y, color, type = 'normal') {
@@ -41,7 +42,7 @@ export class Particle {
             ctx.fillRect(-this.size/2 - this.speedX, -this.size/2 - this.speedY, this.size * 0.7, this.size * 0.7);
         } else if (this.type === 'glow') {
             // Glowing particle
-            ctx.shadowBlur = 20;
+            ctx.shadowBlur = CONFIG.lowFX ? 0 : 20;
             ctx.shadowColor = this.color;
             ctx.fillStyle = this.color;
             ctx.beginPath();

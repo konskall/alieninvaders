@@ -39,15 +39,10 @@ export class LeaderboardManager {
 
         ref.on('value', (snapshot) => {
             const data = snapshot.val();
-            if (data) {
-                this.scores = Object.values(data);
-                this.scores.sort((a, b) => b.score - a.score);
-                this.scores = this.scores.slice(0, 50);
-            } else {
-                this.scores = [];
-            }
+            // Sanitize: the DB is an open trust boundary — drop malformed entries
+            // and coerce score to a number so a poisoned record can't corrupt sorting.
+            this.scores = data ? this._sanitize(Object.values(data)) : [];
             this.initialized = true;
-            console.log('Leaderboard loaded:', this.scores);
         }, (error) => {
             console.warn('Firebase error, using localStorage:', error);
             this.scores = this.loadScoresLocal();
@@ -58,7 +53,7 @@ export class LeaderboardManager {
     loadScoresLocal() {
         try {
             const stored = localStorage.getItem('spaceGameLeaderboard');
-            return stored ? JSON.parse(stored) : [];
+            return stored ? this._sanitize(JSON.parse(stored)) : [];
         } catch (e) {
             return [];
         }
@@ -66,35 +61,49 @@ export class LeaderboardManager {
 
     addScore(playerName, score, level) {
         const entry = {
-            name: playerName.trim() || 'Anonymous',
-            score: Math.floor(score),
-            level: level,
+            name: (playerName || '').trim().slice(0, 20) || 'Anonymous',
+            score: Math.floor(Number(score) || 0),
+            level: Number(level) || 1,
             date: new Date().toLocaleDateString('el-GR'),
             timestamp: Date.now(),
             id: Date.now().toString()
         };
 
         if (this.initialized && this.db) {
-            // Προσπάθεια αποθήκευσης στο Firebase
-            this.db.ref('leaderboard/' + entry.id).set(entry)
-                .then(() => {
-                    console.log('Score saved to Firebase:', entry);
-                })
-                .catch(error => {
-                    console.warn('Firebase save failed, using localStorage:', error);
-                    this.saveScoresLocal([...this.scores, entry]);
-                });
+            // push() gives a collision-free key (Date.now() collides across devices).
+            const ref = this.db.ref('leaderboard').push();
+            entry.id = ref.key;
+            this._mergeEntry(entry);           // optimistic: show it immediately
+            ref.set(entry).catch(error => {
+                console.warn('Firebase save failed, using localStorage:', error);
+                this.saveScoresLocal(this.scores);
+            });
         } else {
-            // Fallback σε localStorage
-            this.saveScoresLocal([...this.scores, entry]);
+            this._mergeEntry(entry);
+            this.saveScoresLocal(this.scores);
         }
         return entry;
     }
 
+    // Merge an entry into the in-memory list (sorted, top-50) so the UI updates
+    // without waiting for the cloud round-trip.
+    _mergeEntry(entry) {
+        this.scores = this._sanitize([...this.scores, entry]);
+    }
+
+    // Keep only well-formed entries, coerce score to a number, sort desc, top 50.
+    _sanitize(list) {
+        return list
+            .filter(e => e && typeof e.name !== 'undefined' && Number.isFinite(Number(e.score)))
+            .map(e => ({ ...e, score: Number(e.score) }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 50);
+    }
+
     saveScoresLocal(scores) {
+        this.scores = this._sanitize(scores);     // keep in-memory list in sync (was stale before)
         try {
-            localStorage.setItem('spaceGameLeaderboard', JSON.stringify(scores));
-            console.log('Score saved to localStorage');
+            localStorage.setItem('spaceGameLeaderboard', JSON.stringify(this.scores));
         } catch (e) {
             console.warn('localStorage save failed:', e);
         }
@@ -108,7 +117,6 @@ export class LeaderboardManager {
         this.scores = [];
         if (this.db) {
             this.db.ref('leaderboard').remove()
-                .then(() => console.log('Leaderboard cleared'))
                 .catch(error => console.warn('Error clearing leaderboard:', error));
         }
         localStorage.removeItem('spaceGameLeaderboard');
@@ -116,6 +124,7 @@ export class LeaderboardManager {
 
     isTopScore(score) {
         if (this.scores.length < 50) return true;
-        return score > this.scores[this.scores.length - 1].score;
+        const last = this.scores[this.scores.length - 1];
+        return score > (Number(last && last.score) || 0);
     }
 }

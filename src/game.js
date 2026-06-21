@@ -271,25 +271,48 @@ export class Game {
 
         if (!isMobile) {
             const maxW = 750;
-            height = window.innerHeight;
             width = Math.min(width, maxW);
         }
 
-        this.canvas.width = width;
-        this.canvas.height = height;
-        this.canvas.style.width = width + 'px';
-        this.canvas.style.height = height + 'px';
-        this.canvas.style.position = 'absolute';
-        this.canvas.style.left = '50%';
-        this.canvas.style.top = '50%';
-        this.canvas.style.transform = 'translate(-50%, -50%)';
-
+        // Logical (CSS-pixel) play area — all game logic and drawing use these.
         CONFIG.canvas.width = width;
         CONFIG.canvas.height = height;
+
+        // Nebula gradients depend on size — rebuild them here, not every frame.
+        this.buildNebulaGradients();
+
+        // Back the canvas with a device-pixel-scaled buffer (crisp on Retina /
+        // hi-DPI mobile), then scale the context so we keep drawing in logical px.
+        const dpr = Math.min(window.devicePixelRatio || 1, 3);
+        const c = this.canvas;
+        c.width = Math.round(width * dpr);
+        c.height = Math.round(height * dpr);
+        c.style.width = width + 'px';
+        c.style.height = height + 'px';
+        c.style.position = 'absolute';
+        c.style.left = '50%';
+        c.style.top = '50%';
+        c.style.transform = 'translate(-50%, -50%)';
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Mobile perf: disable the costly shadowBlur glow on the HIGH-COUNT
+        // entities (particles / bullets / enemies / homing) via CONFIG.lowFX
+        // guards in their draw(). Player, boss, shield, pickups and HUD keep glow.
+        CONFIG.lowFX = isMobile;
+
+        // Keep an active boss aligned to the new logical size (it captured the old one).
+        if (this.boss) {
+            this.boss.canvasWidth = width;
+            this.boss.canvasHeight = height;
+        }
     }
     
     detectMobile() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+        const ua = navigator.userAgent;
+        // iPadOS 13+ reports a desktop Safari UA; detect it via touch + Mac platform.
+        const iPadOS = navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1;
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+            || iPadOS
             || (('ontouchstart' in window) && window.innerWidth <= 1024);
     }
     
@@ -316,8 +339,6 @@ export class Game {
         
         GAME_SETTINGS.autoSensitivityMultiplier = autoMultiplier;
         
-        console.log(`Screen: ${width}x${height}, Diagonal: ${diagonal.toFixed(0)}px`);
-        console.log(`Auto sensitivity multiplier: ${autoMultiplier.toFixed(2)}x (OPTIMIZED)`);
         
         // Set optimal default sensitivity
         const adjustedDefault = 5.0;
@@ -352,8 +373,8 @@ export class Game {
         // Layer 0: far (slow, tiny, dim)
         for (let i = 0; i < 80; i++) {
             this.stars.push(new Star(
-                Math.random() * this.canvas.width,
-                Math.random() * this.canvas.height,
+                Math.random() * CONFIG.canvas.width,
+                Math.random() * CONFIG.canvas.height,
                 randomRange(0.3, 0.7),
                 0.1,
                 0
@@ -362,8 +383,8 @@ export class Game {
         // Layer 1: mid
         for (let i = 0; i < 80; i++) {
             this.stars.push(new Star(
-                Math.random() * this.canvas.width,
-                Math.random() * this.canvas.height,
+                Math.random() * CONFIG.canvas.width,
+                Math.random() * CONFIG.canvas.height,
                 randomRange(0.7, 1.4),
                 0.3,
                 1
@@ -372,8 +393,8 @@ export class Game {
         // Layer 2: near (fast, large, bright)
         for (let i = 0; i < 80; i++) {
             this.stars.push(new Star(
-                Math.random() * this.canvas.width,
-                Math.random() * this.canvas.height,
+                Math.random() * CONFIG.canvas.width,
+                Math.random() * CONFIG.canvas.height,
                 randomRange(1.2, 2.2),
                 0.6,
                 2
@@ -396,9 +417,8 @@ export class Game {
                 e.preventDefault();
             }
             
-            // Super weapon activation with S key
-            // Super weapon activation with S key
-            if ((e.key === 's' || e.key === 'S') && this.state === 'playing' && this.superWeapon.ready && !this.superWeapon.active) {
+            // Super weapon activation with E key (S is the WASD "move down" key)
+            if ((e.key === 'e' || e.key === 'E') && this.state === 'playing' && this.superWeapon.ready && !this.superWeapon.active) {
                 this.activateSuperWeapon();
             }
             
@@ -447,9 +467,10 @@ export class Game {
             this.setupCanvas();
         });
         
-        // Prevent default touch behaviors
+        // Prevent default touch behaviors ONLY during gameplay, so menus, the
+        // leaderboard, gallery and story screens can still scroll on touch devices.
         document.addEventListener('touchmove', (e) => {
-            e.preventDefault();
+            if (this.state === 'playing') e.preventDefault();
         }, { passive: false });
 		 this.setupStoryModeListeners();
 		 
@@ -501,7 +522,6 @@ export class Game {
         // Resume audio context on first user interaction (required for iOS)
         const resumeAudio = () => {
             if (this.soundManager.audioContext && !this.soundManager.initialized) {
-                console.log('User interaction detected, initializing audio...');
                 this.soundManager.ensureAudioContext();
             }
         };
@@ -516,19 +536,15 @@ export class Game {
         const settingsStartBtn = document.getElementById('settings-start-btn');
         
         startBtn.addEventListener('click', () => {
-            console.log('Start button clicked, ensuring audio context...');
             if (this.soundManager.audioContext) {
                 this.soundManager.audioContext.resume().then(() => {
-                    console.log('Audio context resumed on start');
                 });
             }
         });
         
         settingsStartBtn.addEventListener('click', () => {
-            console.log('Settings start button clicked, ensuring audio context...');
             if (this.soundManager.audioContext) {
                 this.soundManager.audioContext.resume().then(() => {
-                    console.log('Audio context resumed on settings start');
                 });
             }
         });
@@ -561,7 +577,7 @@ export class Game {
             
             this.updateJoystickPosition(touch.clientX, touch.clientY);
             joystickStick.classList.add('active');
-        });
+        }, { passive: false });
         
         document.addEventListener('touchmove', (e) => {
             if (!this.touchState.joystickActive) return;
@@ -600,12 +616,12 @@ export class Game {
             
             superWeaponButton.classList.add('active');
             this.activateSuperWeapon();
-        });
-        
+        }, { passive: false });
+
         superWeaponButton.addEventListener('touchend', (e) => {
             e.preventDefault();
             superWeaponButton.classList.remove('active');
-        });
+        }, { passive: false });
         
         // Drag anywhere on canvas for movement (and manual fire if auto-fire OFF)
         canvas.addEventListener('touchstart', (e) => {
@@ -670,8 +686,8 @@ export class Game {
         
         // OPTIMIZED: Direct coordinate conversion with zero overhead
         const rect = this.canvas.getBoundingClientRect();
-        const canvasX = (touchX - rect.left) * (this.canvas.width / rect.width);
-        const canvasY = (touchY - rect.top) * (this.canvas.height / rect.height);
+        const canvasX = (touchX - rect.left) * (CONFIG.canvas.width / rect.width);
+        const canvasY = (touchY - rect.top) * (CONFIG.canvas.height / rect.height);
         
         // OPTIMIZED: Direct direction calculation - instant response
         const dx = canvasX - this.player.x;
@@ -832,8 +848,8 @@ export class Game {
         this.screenShake = { x: 0, y: 0, intensity: 0 };
         
         this.player = new Player(
-            this.canvas.width / 2,
-            this.canvas.height - 100
+            CONFIG.canvas.width / 2,
+            CONFIG.canvas.height - 100
         );
 
         document.getElementById('start-screen').classList.add('hidden');
@@ -952,6 +968,23 @@ export class Game {
         });
     }
     
+    fallbackCopy(text) {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'absolute';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            alert(ok ? 'Αντιγράφηκε! ✅' : 'Αντιγράψτε χειροκίνητα: ' + text);
+        } catch (e) {
+            alert('Αντιγράψτε χειροκίνητα: ' + text);
+        }
+    }
+
     shareScore(platform, message) {
         // Always share the live app URL (from og:url), not a local/dev address
         const ogUrl = document.querySelector('meta[property="og:url"]');
@@ -959,10 +992,12 @@ export class Game {
 
         if (platform === 'copy') {
             const fullText = `${message}\n${shareUrl}`;
-            if (navigator.clipboard) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(fullText)
                     .then(() => alert('Αντιγράφηκε! ✅'))
-                    .catch(() => alert('Αποτυχία αντιγραφής'));
+                    .catch(() => this.fallbackCopy(fullText));
+            } else {
+                this.fallbackCopy(fullText);   // older iOS / non-HTTPS contexts
             }
             return; // keep the dialog open so the user still sees the options
         }
@@ -1026,9 +1061,11 @@ export class Game {
                 alert('Παρακαλώ εισάγετε ένα όνομα!');
                 return;
             }
-            this.leaderboardManager.addScore(name, this.score, this.progressiveDifficulty.currentLevel);
+            // Lock synchronously so a double-tap / re-entrant submit can't save twice.
             saved = true;
+            btn.disabled = true;
             input.disabled = true;
+            this.leaderboardManager.addScore(name, this.score, this.progressiveDifficulty.currentLevel);
             btn.textContent = '✓ Αποθηκεύτηκε!';
         };
     }
@@ -1105,11 +1142,11 @@ updateLeaderboardDisplay() {
             <div class="leaderboard-info">
                 <div class="leaderboard-name">${this.escapeHtml(entry.name)}</div>
                 <div class="leaderboard-meta">
-                    <span>📊 Level ${entry.level}</span>
-                    <span>${entry.date}</span>
+                    <span>📊 Level ${this.escapeHtml(String(entry.level ?? ''))}</span>
+                    <span>${this.escapeHtml(String(entry.date ?? ''))}</span>
                 </div>
             </div>
-            <div class="leaderboard-score">${entry.score.toLocaleString()}</div>
+            <div class="leaderboard-score">${(Number(entry.score) || 0).toLocaleString()}</div>
         `;
         leaderboardList.appendChild(entryEl);
     });
@@ -1123,10 +1160,10 @@ escapeHtml(text) {
         '"': '&quot;',
         "'": '&#039;'
     };
-    return text.replace(/[&<>"']/g, m => map[m]);
+    return String(text ?? '').replace(/[&<>"']/g, m => map[m]);
 }
     spawnEnemy() {
-        const x = randomRange(50, this.canvas.width - 50);
+        const x = randomRange(50, CONFIG.canvas.width - 50);
         const y = -30;
         
         // Get current level from progressive difficulty
@@ -1224,8 +1261,8 @@ escapeHtml(text) {
                     const clearBonus = WAVE_CONFIG.CLEAR_BONUS_PER_WAVE * ws.number;
                     this.score += clearBonus;
                     this.spawnFloatingText(
-                        this.canvas.width / 2,
-                        this.canvas.height / 2 - 30,
+                        CONFIG.canvas.width / 2,
+                        CONFIG.canvas.height / 2 - 30,
                         `WAVE CLEAR! +${clearBonus}`,
                         '#32B8C6',
                         22
@@ -1263,8 +1300,8 @@ escapeHtml(text) {
                         const count = 2 + Math.floor(Math.random() * 2);
                         for (let i = 0; i < count; i++) this.spawnEnemy();
                         this.spawnFloatingText(
-                            this.canvas.width / 2,
-                            this.canvas.height * 0.35,
+                            CONFIG.canvas.width / 2,
+                            CONFIG.canvas.height * 0.35,
                             '⚠ REINFORCEMENTS!', '#FF4400', 18
                         );
                     }
@@ -1280,7 +1317,7 @@ escapeHtml(text) {
     }
 
     spawnBoss() {
-        this.boss = new Boss(this.canvas.width, this.canvas.height, this.waveState.number);
+        this.boss = new Boss(CONFIG.canvas.width, CONFIG.canvas.height, this.waveState.number);
         this.screenShake.intensity = 0.3;
         if (this.soundManager.audioContext) {
             this.soundManager.explosion(2);
@@ -1337,7 +1374,7 @@ escapeHtml(text) {
             x: this.player.x,
             y: this.player.y,
             radius: 0,
-            maxRadius: Math.max(this.canvas.width, this.canvas.height) * 1.5,
+            maxRadius: Math.max(CONFIG.canvas.width, CONFIG.canvas.height) * 1.5,
             life: 1,
             speed: 15
         });
@@ -1359,8 +1396,8 @@ escapeHtml(text) {
         // A few large shockwaves to sell the effect without particle spam
         for (let i = 0; i < 3; i++) {
             this.shockwaves.push(new Shockwave(
-                this.canvas.width / 2 + (i - 1) * 150,
-                this.canvas.height / 2,
+                CONFIG.canvas.width / 2 + (i - 1) * 150,
+                CONFIG.canvas.height / 2,
                 '#FFD700'
             ));
         }
@@ -1406,12 +1443,8 @@ escapeHtml(text) {
 
         this.updateHUD();
         this.updateSuperWeaponUI();
-        
-        // Reset super weapon after duration
-        setTimeout(() => {
-            this.superWeapon.active = false;
-            this.screenShake.intensity = 0;
-        }, CONFIG.superWeapon.duration);
+        // NOTE: deactivation is clock-driven in updateGame() (pause/restart-safe),
+        // not a setTimeout that would keep running while paused or after a restart.
     }
     
     createExplosion(x, y, size, color) {
@@ -1490,7 +1523,7 @@ escapeHtml(text) {
             dy *= 0.707;
         }
 
-        this.player.move(dx, dy, this.canvas);
+        this.player.move(dx, dy, CONFIG.canvas);
 
         // Fire logic based on auto-fire setting
         const hasMultiShot = !!this.activeBonuses.multiShot;
@@ -1523,6 +1556,12 @@ escapeHtml(text) {
 
         this.currentTime = Date.now();
 
+        // Clock-driven super-weapon deactivation (survives pause/restart correctly)
+        if (this.superWeapon.active &&
+            this.currentTime - this.superWeapon.activationTime >= CONFIG.superWeapon.duration) {
+            this.superWeapon.active = false;
+        }
+
         // Spawn dynamic background elements
         this.updateBackgroundElements();
 
@@ -1535,17 +1574,21 @@ escapeHtml(text) {
         }
 
         // Update stars
-        this.stars.forEach(star => star.update(this.canvas));
+        this.stars.forEach(star => star.update(CONFIG.canvas));
 
-        // Update bullets
-        this.bullets = this.bullets.filter(bullet => {
+        // Update bullets (in-place swap+pop — no per-frame array allocation)
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const bullet = this.bullets[i];
             bullet.update();
-            return !bullet.isOffScreen(this.canvas);
-        });
+            if (bullet.isOffScreen(CONFIG.canvas)) {
+                this.bullets[i] = this.bullets[this.bullets.length - 1];
+                this.bullets.pop();
+            }
+        }
 
         // Update enemies
         this.enemies.forEach(enemy => {
-            enemy.update(this.player.x, this.player.y, this.canvas);
+            enemy.update(this.player.x, this.player.y, CONFIG.canvas);
             
             // Enemy shooting
             const bullet = enemy.shoot(this.currentTime, this.player.x, this.player.y);
@@ -1560,8 +1603,13 @@ escapeHtml(text) {
             }
         });
 
-        // Remove off-screen enemies
-        this.enemies = this.enemies.filter(enemy => !enemy.isOffScreen(this.canvas));
+        // Remove off-screen enemies (in-place swap+pop)
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            if (this.enemies[i].isOffScreen(CONFIG.canvas)) {
+                this.enemies[i] = this.enemies[this.enemies.length - 1];
+                this.enemies.pop();
+            }
+        }
 
         // Update boss
         if (this.boss) {
@@ -1579,17 +1627,21 @@ escapeHtml(text) {
                 });
             }
 
-            if (this.boss.isOffScreen(this.canvas)) {
+            if (this.boss.isOffScreen(CONFIG.canvas)) {
                 this.boss = null;
                 this.homingBullets = [];
             }
         }
 
-        // Update homing bullets
-        this.homingBullets = this.homingBullets.filter(hb => {
+        // Update homing bullets (in-place swap+pop)
+        for (let i = this.homingBullets.length - 1; i >= 0; i--) {
+            const hb = this.homingBullets[i];
             hb.update(this.player.x, this.player.y);
-            return !hb.isOffScreen(this.canvas);
-        });
+            if (hb.isOffScreen(CONFIG.canvas)) {
+                this.homingBullets[i] = this.homingBullets[this.homingBullets.length - 1];
+                this.homingBullets.pop();
+            }
+        }
 
         // Update particles in-place (swap+pop avoids array allocation each frame)
         for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -1633,18 +1685,19 @@ escapeHtml(text) {
         // Animated score lerp
         this.displayScore += (this.score - this.displayScore) * 0.12;
 
-        // Update bonus pickups
-        this.bonusPickups = this.bonusPickups.filter(bonus => {
-            bonus.update(this.canvas, this.player.x, this.player.y);
-            
-            // Check collision with player
-            if (bonus.collidesWith(this.player.x, this.player.y, this.player.size)) {
-                this.collectBonus(bonus);
-                return false;
+        // Update bonus pickups (in-place swap+pop)
+        for (let i = this.bonusPickups.length - 1; i >= 0; i--) {
+            const bonus = this.bonusPickups[i];
+            bonus.update(CONFIG.canvas, this.player.x, this.player.y);
+
+            const collected = bonus.collidesWith(this.player.x, this.player.y, this.player.size);
+            if (collected) this.collectBonus(bonus);
+
+            if (collected || bonus.isDead()) {
+                this.bonusPickups[i] = this.bonusPickups[this.bonusPickups.length - 1];
+                this.bonusPickups.pop();
             }
-            
-            return !bonus.isDead();
-        });
+        }
         
         // Update active bonuses
         this.updateActiveBonuses();
@@ -1947,6 +2000,18 @@ escapeHtml(text) {
         }
     }
 
+    buildNebulaGradients() {
+        if (!this.ctx) return;
+        const W = CONFIG.canvas.width, H = CONFIG.canvas.height;
+        const g1 = this.ctx.createRadialGradient(W * 0.25, H * 0.2, 0, W * 0.25, H * 0.2, W * 0.45);
+        g1.addColorStop(0, 'rgba(70, 0, 110, 0.10)'); g1.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        const g2 = this.ctx.createRadialGradient(W * 0.78, H * 0.65, 0, W * 0.78, H * 0.65, W * 0.38);
+        g2.addColorStop(0, 'rgba(0, 35, 90, 0.09)'); g2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        const g3 = this.ctx.createRadialGradient(W * 0.5, H * 0.85, 0, W * 0.5, H * 0.85, W * 0.3);
+        g3.addColorStop(0, 'rgba(0, 60, 60, 0.07)'); g3.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        this.nebulaGradients = [g1, g2, g3];
+    }
+
     draw() {
         // Apply screen shake
         this.ctx.save();
@@ -1954,35 +2019,15 @@ escapeHtml(text) {
         
         // Clear canvas
         this.ctx.fillStyle = '#000000';
-        this.ctx.fillRect(-this.screenShake.x, -this.screenShake.y, this.canvas.width, this.canvas.height);
+        this.ctx.fillRect(-this.screenShake.x, -this.screenShake.y, CONFIG.canvas.width, CONFIG.canvas.height);
 
-        // Static nebula gradients
-        const neb1 = this.ctx.createRadialGradient(
-            this.canvas.width * 0.25, this.canvas.height * 0.2, 0,
-            this.canvas.width * 0.25, this.canvas.height * 0.2, this.canvas.width * 0.45
-        );
-        neb1.addColorStop(0, 'rgba(70, 0, 110, 0.10)');
-        neb1.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        this.ctx.fillStyle = neb1;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        const neb2 = this.ctx.createRadialGradient(
-            this.canvas.width * 0.78, this.canvas.height * 0.65, 0,
-            this.canvas.width * 0.78, this.canvas.height * 0.65, this.canvas.width * 0.38
-        );
-        neb2.addColorStop(0, 'rgba(0, 35, 90, 0.09)');
-        neb2.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        this.ctx.fillStyle = neb2;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        const neb3 = this.ctx.createRadialGradient(
-            this.canvas.width * 0.5, this.canvas.height * 0.85, 0,
-            this.canvas.width * 0.5, this.canvas.height * 0.85, this.canvas.width * 0.3
-        );
-        neb3.addColorStop(0, 'rgba(0, 60, 60, 0.07)');
-        neb3.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        this.ctx.fillStyle = neb3;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        // Static nebula gradients (built once per size in buildNebulaGradients())
+        if (this.nebulaGradients) {
+            for (const g of this.nebulaGradients) {
+                this.ctx.fillStyle = g;
+                this.ctx.fillRect(0, 0, CONFIG.canvas.width, CONFIG.canvas.height);
+            }
+        }
 
         // Draw stars
         this.stars.forEach(star => star.draw(this.ctx));
@@ -1997,17 +2042,17 @@ escapeHtml(text) {
             this.ctx.save();
             this.ctx.globalAlpha = alpha;
             this.ctx.fillStyle = 'rgba(0, 10, 30, 0.88)';
-            this.ctx.fillRect(0, this.canvas.height / 2 - 42, this.canvas.width, 84);
+            this.ctx.fillRect(0, CONFIG.canvas.height / 2 - 42, CONFIG.canvas.width, 84);
             this.ctx.strokeStyle = this.waveState.bannerText.includes('BOSS') ? '#FF0066' : '#32B8C6';
             this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(0, this.canvas.height / 2 - 42, this.canvas.width, 84);
+            this.ctx.strokeRect(0, CONFIG.canvas.height / 2 - 42, CONFIG.canvas.width, 84);
             this.ctx.font = 'bold 26px Orbitron, monospace';
             this.ctx.fillStyle = this.waveState.bannerText.includes('BOSS') ? '#FF0066' : '#FFD700';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
             this.ctx.shadowBlur = 20;
             this.ctx.shadowColor = this.waveState.bannerText.includes('BOSS') ? '#FF0066' : '#FFD700';
-            this.ctx.fillText(this.waveState.bannerText, this.canvas.width / 2, this.canvas.height / 2);
+            this.ctx.fillText(this.waveState.bannerText, CONFIG.canvas.width / 2, CONFIG.canvas.height / 2);
             this.ctx.restore();
         }
 
@@ -2078,7 +2123,7 @@ escapeHtml(text) {
             this.ctx.textBaseline = 'bottom';
             this.ctx.shadowBlur = 8;
             this.ctx.shadowColor = '#FFD700';
-            this.ctx.fillText(`COMBO x${this.combo}`, 20, this.canvas.height - 20);
+            this.ctx.fillText(`COMBO x${this.combo}`, 20, CONFIG.canvas.height - 20);
             this.ctx.restore();
         }
         // Kill counter
@@ -2088,7 +2133,7 @@ escapeHtml(text) {
             this.ctx.fillStyle = 'rgba(180,180,180,0.7)';
             this.ctx.textAlign = 'right';
             this.ctx.textBaseline = 'bottom';
-            this.ctx.fillText(`KILLS ${this.killCount}`, this.canvas.width - 20, this.canvas.height - 20);
+            this.ctx.fillText(`KILLS ${this.killCount}`, CONFIG.canvas.width - 20, CONFIG.canvas.height - 20);
             this.ctx.restore();
         }
 
@@ -2235,8 +2280,8 @@ escapeHtml(text) {
             this.soundManager.levelUp();
             this.musicManager.updateForLevel(currentMilestone.level);
             this.spawnFloatingText(
-                this.canvas.width / 2,
-                this.canvas.height / 2,
+                CONFIG.canvas.width / 2,
+                CONFIG.canvas.height / 2,
                 `LEVEL ${currentMilestone.level}!`,
                 '#FFD700',
                 28
@@ -2313,7 +2358,9 @@ closeStoryScreen() {
     gameLoop() {
         this.handleInput();
         this.updateGame();
-        this.draw();
+        // Only paint the game canvas while playing — menus/pause/game-over are
+        // opaque screens on top, so rendering underneath wastes battery/GPU.
+        if (this.state === 'playing') this.draw();
         requestAnimationFrame(() => this.gameLoop());
     }
 }
