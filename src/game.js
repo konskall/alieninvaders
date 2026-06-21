@@ -875,7 +875,6 @@ export class Game {
         const dialogHTML = `
             <div id="share-dialog" class="share-dialog">
                 <div class="share-content">
-                    <span class="menu-brk tr"></span><span class="menu-brk bl"></span>
                     <h2>Κοινοποίηση Σκορ</h2>
                     <div class="share-message">${message}</div>
                     <div class="share-buttons">
