@@ -2,8 +2,8 @@
    MAIN MENU (hub) — sci-fi command-console redesign
    Scoped to #start-screen so it never affects the other screens.
    ============================================================ */
-#game-container {
-  /* console design tokens — shared by menu + pause / game over / settings */
+:root {
+  /* console design tokens — shared by all screens + modals */
   --m-teal: #32b8c6;
   --m-teal-bright: #67e8f2;
   --m-teal-deep: #15535e;

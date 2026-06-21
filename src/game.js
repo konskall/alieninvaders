@@ -873,11 +873,7 @@ export class Game {
         const dialogHTML = `
             <div id="share-dialog" class="share-dialog">
                 <div class="share-content">
-                    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#f1c40f" viewBox="0 0 24 24">
-  <path d="M12 2l2.39 6.91L22 10l-5 3.64L17.78 22 12 18.27 6.22 22 7 13.64 2 10l7.61-1.09L12 2z"/>
-</svg> Κοινοποίηση Σκορ <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#f1c40f" viewBox="0 0 24 24">
-  <path d="M12 2l2.39 6.91L22 10l-5 3.64L17.78 22 12 18.27 6.22 22 7 13.64 2 10l7.61-1.09L12 2z"/>
-</svg></h2>
+                    <h2>Κοινοποίηση Σκορ</h2>
                     <div class="share-message">${message}</div>
                     <div class="share-buttons">
                          <button class="share-btn" data-platform="facebook">
