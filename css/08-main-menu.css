@@ -180,7 +180,8 @@
   border-radius: 0;
   box-shadow: none;
 }
-.console-panel h1 {
+.console-panel h1,
+.console-panel h2 {
   font-family: 'Orbitron', sans-serif; font-weight: 700;
   font-size: 26px; letter-spacing: .06em;
   color: var(--m-teal-bright); text-shadow: 0 0 18px rgba(50,184,198,.45);
