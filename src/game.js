@@ -1034,6 +1034,8 @@ export class Game {
     }
 
     gameOver() {
+    // Co-op: a single ship dying does not end the game while a partner survives.
+    if (this.mode !== 'solo' && !this.roster.isGameOver()) { this.updateHUD(); return; }
     this.state = 'gameOver';
     if (this.boss) {
         this.boss = null;
@@ -1511,6 +1513,7 @@ escapeHtml(text) {
 
     handleInput() {
         if (!this.player || this.state !== 'playing') return;
+        if (this.player.health <= 0) return;   // dead ship = spectating (co-op)
 
         let dx = 0;
         let dy = 0;
@@ -2016,6 +2019,9 @@ escapeHtml(text) {
                 }
             }
         }
+
+        // Co-op: damage the remote (guest) ship too (host-authoritative; additive).
+        if (this.mode === 'coopHost') this._damageRemoteShip();
     }
 
     buildNebulaGradients() {
@@ -2428,6 +2434,49 @@ closeStoryScreen() {
         if (!ship || ship.health <= 0) return;
         const bullets = ship.shoot(this.currentTime, false);
         if (bullets) Array.isArray(bullets) ? this.bullets.push(...bullets) : this.bullets.push(bullets);
+    }
+
+    // Apply one hit to a ship (shield/invincibility/damage); ends the game only
+    // when ALL ships are dead. Shared by the co-op remote-ship damage path.
+    _hitShip(ship) {
+        this.screenShake.intensity = Math.max(this.screenShake.intensity, 0.25);
+        this.combo = 0;
+        if (this.activeBonuses.shield) {
+            delete this.activeBonuses.shield;
+            this.updateActiveBonusesUI();
+            for (let k = 0; k < 20; k++) this.particles.push(new Particle(ship.x, ship.y, '#00CCFF', 'glow'));
+            return;
+        }
+        this.soundManager.damageTaken();
+        if (GAME_SETTINGS.vibrationEnabled) this.vibrationManager.damage();
+        for (let k = 0; k < 10; k++) this.particles.push(new Particle(ship.x, ship.y, '#FFD700'));
+        ship.makeInvincible();
+        if (ship.takeDamage()) {
+            this.createExplosion(ship.x, ship.y, ship.size * 1.5, '#FF6347');   // ship destroyed -> spectates
+        }
+        this.updateHUD();
+        if (this.roster.isGameOver()) this.gameOver();
+    }
+
+    // Host-authoritative damage for the remote (guest) ship. Additive: the
+    // existing collision blocks already damage the local (host) ship.
+    _damageRemoteShip() {
+        const gs = this.coopRemoteShip;
+        if (!gs || gs.health <= 0 || gs.invincible) return;
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const b = this.bullets[i];
+            if (b.isPlayerBullet) continue;
+            if (distance(b.x, b.y, gs.x, gs.y) < b.radius + gs.size) { this.bullets.splice(i, 1); return this._hitShip(gs); }
+        }
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            const e = this.enemies[i];
+            if (distance(gs.x, gs.y, e.x, e.y) < gs.size + e.size) { this.enemies.splice(i, 1); this.createExplosion(e.x, e.y, e.size, '#FF6347'); return this._hitShip(gs); }
+        }
+        for (let i = this.homingBullets.length - 1; i >= 0; i--) {
+            const h = this.homingBullets[i];
+            if (distance(h.x, h.y, gs.x, gs.y) < h.radius + gs.size) { this.homingBullets.splice(i, 1); return this._hitShip(gs); }
+        }
+        if (this.boss && this.boss.collidesWith(gs.x, gs.y, gs.size)) { return this._hitShip(gs); }
     }
 
     coopGetLocalInput() {
