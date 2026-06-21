@@ -2,8 +2,8 @@
    MAIN MENU (hub) — sci-fi command-console redesign
    Scoped to #start-screen so it never affects the other screens.
    ============================================================ */
-#start-screen {
-  /* menu-local tokens */
+#game-container {
+  /* console design tokens — shared by menu + pause / game over / settings */
   --m-teal: #32b8c6;
   --m-teal-bright: #67e8f2;
   --m-teal-deep: #15535e;
@@ -12,7 +12,9 @@
   --m-ink-dim: #7fa3ad;
   --m-gold: #ffce6b;
   --m-row-h: 60px;
+}
 
+#start-screen {
   /* override the generic dark .screen backdrop with a deep-space field */
   background: radial-gradient(120% 75% at 50% -5%, #11243a 0%, #081120 42%, #03060c 100%);
   backdrop-filter: none;
@@ -148,8 +150,52 @@
   #start-screen .menu-launch::after { animation: none; }
 }
 @media (max-height: 680px) {
-  #start-screen { --m-row-h: 54px; }
+  #game-container { --m-row-h: 54px; }
   .menu-wordmark .l1, .menu-wordmark .l2 { font-size: 26px; }
   .menu-launch { height: 58px; }
   .menu-shell { gap: 14px; padding-top: 24px; }
+}
+
+/* give labels right breathing room (action rows have no chevron) */
+.menu-row__label { padding-right: 12px; }
+
+/* ============================================================
+   CONSOLE PANEL — shared look for Pause / Game Over / Settings
+   so they use the same button system as the main menu.
+   ============================================================ */
+.screen-content.console-panel {
+  width: min(380px, 92vw);
+  max-width: none;
+  align-items: stretch;
+  gap: 16px;
+  padding: 26px 22px;
+  background: linear-gradient(180deg, rgba(14,28,42,.94), rgba(7,14,24,.96));
+  border: 1px solid var(--m-line);
+  border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.55), inset 0 1px 0 rgba(120,230,242,.08);
+}
+.console-panel h1 {
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 26px; letter-spacing: .06em;
+  color: var(--m-teal-bright); text-shadow: 0 0 18px rgba(50,184,198,.45);
+  margin: 0 0 2px;
+}
+.console-panel .subtitle {
+  margin: -10px 0 0; font-family: 'Exo 2', sans-serif;
+  font-size: 13px; letter-spacing: .04em; color: var(--m-ink-dim);
+}
+.console-panel .menu-list { width: 100%; }
+
+/* Game Over score block */
+.console-panel .final-score-container {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 0 2px; margin: 0; border: none; background: none;
+}
+.console-panel .score-label {
+  font: 600 11px/1 'Exo 2', sans-serif; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--m-ink-dim); margin: 0;
+}
+.console-panel .final-score {
+  font-family: 'Orbitron', sans-serif; font-weight: 800; font-size: 46px; line-height: 1;
+  color: var(--m-ink); text-shadow: 0 0 22px rgba(50,184,198,.5); margin: 0;
 }
