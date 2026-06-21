@@ -101,6 +101,7 @@ export class Game {
         this.isMobileDevice = this.detectMobile();
 
         this.state = 'credits';
+        this.settingsOpener = 'menu';
         this.score = 0;
         this.player = null;
         this.enemies = [];
@@ -148,16 +149,16 @@ export class Game {
             });
         });
         
-        // Show credits splash screen, then auto-transition to settings
+        // Show credits splash screen, then auto-transition to the main menu
         setTimeout(() => {
-            this.transitionFromCreditsToSettings();
+            this.transitionFromCreditsToMenu();
         }, 10000);
         
         // Allow click to skip credits
         const creditsScreen = document.getElementById('credits-screen');
         creditsScreen.addEventListener('click', () => {
             if (this.state === 'credits') {
-                this.transitionFromCreditsToSettings();
+                this.transitionFromCreditsToMenu();
             }
         });
         
@@ -178,8 +179,7 @@ export class Game {
                 this.soundManager.audioContext.resume();
             }
             
-            document.getElementById('settings-screen').classList.add('hidden');
-            document.getElementById('start-screen').classList.remove('hidden');
+            this.returnFromSettings();
         });
 		const difficultySelect = document.getElementById('difficulty-select')
   if (difficultySelect) {
@@ -187,12 +187,49 @@ export class Game {
   }
     }
     
-    transitionFromCreditsToSettings() {
+    transitionFromCreditsToMenu() {
         if (this.state !== 'credits') return;
-        
-        this.state = 'settings';
+
         document.getElementById('credits-screen').classList.add('hidden');
+        this.showMenu();
+    }
+
+    showMenu() {
+        this.state = 'menu';
+        ['game-over-screen', 'pause-screen', 'settings-screen', 'story-screen',
+         'gallery-screen', 'hud', 'active-bonuses', 'touch-controls', 'leaderboard-modal']
+            .forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+        const shareDialog = document.getElementById('share-dialog');
+        if (shareDialog) shareDialog.remove();
+        this.musicManager.stop();
+        this.resetJoystick();
+        document.getElementById('start-screen').classList.remove('hidden');
+    }
+
+    openSettings(opener) {
+        this.settingsOpener = opener;
+        ['start-screen', 'pause-screen', 'game-over-screen'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        });
         document.getElementById('settings-screen').classList.remove('hidden');
+        this.state = 'settings';
+    }
+
+    returnFromSettings() {
+        document.getElementById('settings-screen').classList.add('hidden');
+        if (this.settingsOpener === 'paused') {
+            document.getElementById('pause-screen').classList.remove('hidden');
+            this.state = 'paused';
+        } else if (this.settingsOpener === 'gameOver') {
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            this.state = 'gameOver';
+        } else {
+            this.showMenu();
+        }
     }
 
     setupCanvas() {
@@ -387,6 +424,33 @@ export class Game {
 		 document.getElementById('view-leaderboard-btn').addEventListener('click', () => {
     this.showLeaderboardModal();
 });
+        // Main-menu hub buttons
+        document.getElementById('menu-leaderboard-btn').addEventListener('click', () => {
+            this.showLeaderboardModal();
+        });
+        document.getElementById('menu-settings-btn').addEventListener('click', () => {
+            this.openSettings('menu');
+        });
+
+        // Pause-screen buttons
+        document.getElementById('resume-btn').addEventListener('click', () => {
+            this.resumeGame();
+        });
+        document.getElementById('pause-restart-btn').addEventListener('click', () => {
+            this.restartGame();
+        });
+        document.getElementById('pause-settings-btn').addEventListener('click', () => {
+            this.openSettings('paused');
+        });
+        document.getElementById('pause-menu-btn').addEventListener('click', () => {
+            this.showMenu();
+        });
+
+        // Game Over menu button
+        document.getElementById('game-over-menu-btn').addEventListener('click', () => {
+            this.showMenu();
+        });
+
         document.getElementById('music-toggle-btn').addEventListener('click', () => {
             const playing = this.musicManager.toggle();
             document.getElementById('music-toggle-btn').textContent = playing ? '🎵' : '🔇';
@@ -729,6 +793,7 @@ export class Game {
 
         document.getElementById('start-screen').classList.add('hidden');
         document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('pause-screen').classList.add('hidden');
         document.getElementById('hud').classList.remove('hidden');
         document.getElementById('active-bonuses').classList.remove('hidden');
         
@@ -772,10 +837,7 @@ export class Game {
     }
     
     goToSettings() {
-        // Go to settings screen from game over
-        document.getElementById('game-over-screen').classList.add('hidden');
-        document.getElementById('settings-screen').classList.remove('hidden');
-        this.state = 'settings';
+        this.openSettings('gameOver');
     }
     
     showShareDialog() {
@@ -892,12 +954,43 @@ export class Game {
     this.soundManager.gameOver();
     this.musicManager.stop();
     document.getElementById('final-score').textContent = this.score;
+    this.setupGameOverScoreEntry();
     document.getElementById('game-over-screen').classList.remove('hidden');
     document.getElementById('hud').classList.add('hidden');
     document.getElementById('active-bonuses').classList.add('hidden');
     document.getElementById('touch-controls').classList.add('hidden');
     this.resetJoystick();
 }
+
+    setupGameOverScoreEntry() {
+        const form = document.getElementById('game-over-score-form');
+        const input = document.getElementById('game-over-name-input');
+        if (!form || !input) return;
+
+        const qualifies = this.leaderboardManager.isTopScore(this.score);
+        form.classList.toggle('hidden', !qualifies);
+        if (!qualifies) return;
+
+        input.value = '';
+        input.disabled = false;
+        const btn = form.querySelector('button');
+        btn.textContent = 'Αποθήκευση Σκορ';
+        let saved = false;
+
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            if (saved) return;
+            const name = input.value.trim();
+            if (!name) {
+                alert('Παρακαλώ εισάγετε ένα όνομα!');
+                return;
+            }
+            this.leaderboardManager.addScore(name, this.score, this.progressiveDifficulty.currentLevel);
+            saved = true;
+            input.disabled = true;
+            btn.textContent = '✓ Αποθηκεύτηκε!';
+        };
+    }
 
     updateHUD() {
         const scoreElement = document.getElementById('score');
@@ -926,43 +1019,11 @@ export class Game {
     }
 showLeaderboardModal() {
     const modal = document.getElementById('leaderboard-modal');
-    const leaderboardList = document.getElementById('leaderboard-list');
-    const playerNameInput = document.getElementById('player-name-input');
-    const form = document.getElementById('score-entry-form');
-    // Εμφανίστε το modal
+
+    // View-only — name entry now lives in the Game Over screen
     modal.classList.remove('hidden');
-    
-    // Ενημερώστε τη λίστα με τα τρέχοντα σκορ
     this.updateLeaderboardDisplay();
-    
-    // Καταχώριση σκορ κατά την υποβολή του form
-    form.onsubmit = (e) => {
-        e.preventDefault();
-        const playerName = playerNameInput.value.trim();
-        
-        if (!playerName) {
-            alert('Παρακαλώ εισάγετε ένα όνομα!');
-            return;
-        }
-        
-        // Προσθέστε το σκορ
-        this.leaderboardManager.addScore(playerName, this.score, this.progressiveDifficulty.currentLevel);
-        
-        // Ενημερώστε τη λίστα
-        this.updateLeaderboardDisplay();
-        
-        // Καθαρίστε το input
-        playerNameInput.value = '';
-        
-        // Δείξτε ένα μήνυμα επιτυχίας
-        const btn = form.querySelector('button');
-        const originalText = btn.textContent;
-        btn.textContent = '✓ Αποθηκεύτηκε!';
-        setTimeout(() => {
-            btn.textContent = originalText;
-        }, 2000);
-    };
-    
+
     // Κλείσιμο modal
     const closeBtn = modal.querySelector('.modal-close');
     const closeOnBackdrop = (e) => {

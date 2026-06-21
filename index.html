@@ -105,7 +105,7 @@
         </div>
 
         <div class="story-actions">
-            <button class="btn btn--primary btn--lg" id="story-start-btn">Ξεκινήστε την Αποστολή</button>
+            <button class="btn btn--primary btn--lg" id="story-start-btn">▶ Παίξε</button>
         </div>
     </div>
 </div>
@@ -186,7 +186,7 @@
                         </label>
                     </div>
                 </div>
-                <button class="btn btn--primary btn--lg" id="settings-start-btn">Έναρξη Παιχνιδιού</button>
+                <button class="btn btn--primary btn--lg" id="settings-start-btn">💾 Αποθήκευση & Πίσω</button>
             </div>
         </div>
 
@@ -208,12 +208,12 @@
                         <p><strong>Σούπερ Όπλο:</strong> Πάτησε το κουμπί 💥</p>
                         <p class="note">Tip: Αυτόματα πυρά πάντα ενεργά!</p>
                     </div>
-					<button class="btn btn--primary btn--lg" id="story-btn" style="margin-top: 12px;; border-color: #8b5cf6;">Το Χρονικό
-</button>
-<button class="btn btn--primary btn--lg" id="gallery-btn" style="margin-top: 12px;">Artwork
-</button>
                 </div>
-                <button class="btn btn--primary btn--lg" id="start-btn">Έναρξη Παιχνιδιού</button>
+                <button class="btn btn--primary btn--lg" id="start-btn">▶ Έναρξη Παιχνιδιού</button>
+                <button class="btn btn--primary btn--lg" id="story-btn" style="margin-top: 12px; border-color: #8b5cf6;">📖 Το Χρονικό</button>
+                <button class="btn btn--primary btn--lg" id="gallery-btn" style="margin-top: 12px;">🖼 Artwork</button>
+                <button class="btn btn--primary btn--lg" id="menu-leaderboard-btn" style="margin-top: 12px;">🏆 Top Players</button>
+                <button class="btn btn--primary btn--lg" id="menu-settings-btn" style="margin-top: 12px;">⚙ Ρυθμίσεις</button>
             </div>
         </div>
 
@@ -224,12 +224,24 @@
                 <div class="final-score-container">
                     <p class="score-label">Τελική Βαθμολογία:</p>
                     <p class="final-score" id="final-score">0</p>
-					<button id="view-leaderboard-btn" class="btn btn--primary btn--lg btn--full-width">Top Players 👑</button>
+                    <button id="view-leaderboard-btn" class="btn btn--primary btn--lg btn--full-width">Top Players 👑</button>
                 </div>
-				
-                <button class="btn btn--primary btn--lg" id="restart-btn">Νέο Παιχνίδι</button>
-                <button class="btn btn--primary btn--lg" id="game-over-settings-btn" style="margin-top: 16px;">Ρυθμίσεις</button>
-                <button class="btn btn--primary btn--lg" id="share-score-btn" style="margin-top: 16px;">Κοινοποίηση Σκορ 🏆</button>
+
+                <form id="game-over-score-form" class="score-entry-form hidden" style="margin: 12px 0;">
+                    <input
+                        type="text"
+                        id="game-over-name-input"
+                        placeholder="🏆 Μπήκες στο Top 50! Το όνομά σου..."
+                        maxlength="20"
+                        class="form-control"
+                    >
+                    <button type="submit" class="btn btn--primary">Αποθήκευση Σκορ</button>
+                </form>
+
+                <button class="btn btn--primary btn--lg" id="restart-btn">▶ Νέο Παιχνίδι</button>
+                <button class="btn btn--primary btn--lg" id="game-over-settings-btn" style="margin-top: 16px;">⚙ Ρυθμίσεις</button>
+                <button class="btn btn--primary btn--lg" id="share-score-btn" style="margin-top: 16px;">📤 Κοινοποίηση Σκορ</button>
+                <button class="btn btn--primary btn--lg" id="game-over-menu-btn" style="margin-top: 16px;">🏠 Κεντρικό Μενού</button>
             </div>
         </div>
 
@@ -238,6 +250,10 @@
             <div class="screen-content">
                 <h1>Παύση</h1>
                 <p class="subtitle">Πάτησε P για συνέχεια</p>
+                <button class="btn btn--primary btn--lg" id="resume-btn">▶ Συνέχεια</button>
+                <button class="btn btn--primary btn--lg" id="pause-restart-btn" style="margin-top: 12px;">🔄 Επανεκκίνηση</button>
+                <button class="btn btn--primary btn--lg" id="pause-settings-btn" style="margin-top: 12px;">⚙ Ρυθμίσεις</button>
+                <button class="btn btn--primary btn--lg" id="pause-menu-btn" style="margin-top: 12px;">🏠 Κεντρικό Μενού</button>
             </div>
         </div>
 
@@ -325,18 +341,6 @@
             <div id="leaderboard-display">
                 <div id="leaderboard-list" class="leaderboard-list"></div>
             </div>
-        </div>
-        <div class="modal-footer">
-            <form id="score-entry-form" class="score-entry-form">
-                <input 
-                    type="text" 
-                    id="player-name-input" 
-                    placeholder="Εισάγετε το όνομά σας..." 
-                    maxlength="20"
-                    class="form-control"
-                >
-                <button type="submit" class="btn btn--primary">Αποθήκευση Σκορ</button>
-            </form>
         </div>
     </div>
 </div>
