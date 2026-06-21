@@ -204,6 +204,16 @@ export class Game {
             });
         const shareDialog = document.getElementById('share-dialog');
         if (shareDialog) shareDialog.remove();
+        // Leaving any in-progress game: clear transient entities so the hub shows a clean starfield
+        this.enemies = [];
+        this.bullets = [];
+        this.particles = [];
+        this.shockwaves = [];
+        this.floatingTexts = [];
+        this.homingBullets = [];
+        this.bonusPickups = [];
+        this.boss = null;
+        this.keys = {};
         this.musicManager.stop();
         this.resetJoystick();
         document.getElementById('start-screen').classList.remove('hidden');
@@ -727,6 +737,7 @@ export class Game {
 
     startGame() {
         this.state = 'playing';
+        this.keys = {};
         this.score = 0;
         this.enemies = [];
         this.bullets = [];

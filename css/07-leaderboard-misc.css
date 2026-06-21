@@ -127,7 +127,7 @@
     gap: var(--space-12);
 }
 
-#player-name-input {
+.score-entry-form .form-control {
     flex: 1;
     padding: var(--space-12);
     background: rgba(0, 0, 0, 0.5);
@@ -137,11 +137,11 @@
     font-size: var(--font-size-base);
 }
 
-#player-name-input::placeholder {
+.score-entry-form .form-control::placeholder {
     color: rgba(167, 169, 169, 0.6);
 }
 
-#player-name-input:focus {
+.score-entry-form .form-control:focus {
     outline: none;
     border-color: var(--color-teal-300);
     box-shadow: 0 0 10px rgba(50, 184, 198, 0.3);
