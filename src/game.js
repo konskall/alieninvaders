@@ -2454,6 +2454,10 @@ closeStoryScreen() {
         ship1.x = CONFIG.canvas.width * 0.60;
         this.roster.players = [ship0, ship1];
         this.roster.localIndex = role === 'host' ? 0 : 1;
+        // Distinct ship colors so players never confuse them. Per-screen: your
+        // ship stays the default teal ("you"), the partner is orange ("them").
+        this.roster.players[this.roster.localIndex].color = CONFIG.player.color;   // you = teal
+        this.coopRemoteShip.color = '#FF7A3D';                                     // partner = orange
     }
 
     get coopRemoteShip() {
