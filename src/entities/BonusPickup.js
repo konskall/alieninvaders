@@ -65,14 +65,20 @@ export class BonusPickup {
         ctx.arc(this.x, this.y, this.size * pulse, 0, Math.PI * 2);
         ctx.fill();
 
-        // Icon
+        // Icon — center on the glyph's ACTUAL ink box, not the font 'middle'
+        // baseline. Emoji glyphs sit off-centre within their line box, so
+        // 'middle' renders them visibly offset from the (centered) glow — most
+        // obviously the heart. measureText lets us correct both axes.
         ctx.font = '24px Arial';
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        ctx.textBaseline = 'alphabetic';
         ctx.fillStyle = '#FFFFFF';
         ctx.shadowBlur = 5;
         ctx.shadowColor = '#000000';
-        ctx.fillText(this.config.icon, this.x, this.y);
+        const m = ctx.measureText(this.config.icon);
+        const dx = ((m.actualBoundingBoxLeft || 0) - (m.actualBoundingBoxRight || 0)) / 2;
+        const dy = ((m.actualBoundingBoxAscent || 0) - (m.actualBoundingBoxDescent || 0)) / 2;
+        ctx.fillText(this.config.icon, this.x + dx, this.y + dy);
 
         ctx.restore();
     }
