@@ -513,7 +513,31 @@ export class Game {
             window.visualViewport.addEventListener('resize', () => this.setupCanvas());
         }
         window.addEventListener('orientationchange', () => setTimeout(() => this.setupCanvas(), 100));
-        
+
+        // Audio lifecycle: stop the music scheduler AND suspend the shared
+        // AudioContext whenever the page is hidden or closing (PWA backgrounded,
+        // tab switched, window closed). The music scheduler is a setTimeout loop —
+        // without this it (and the audio) keep running in the background. Resume on
+        // return, restarting music only if a game is actively playing.
+        const suspendAudio = () => {
+            this._musicWasOn = !!(this.musicManager && this.musicManager.playing);
+            if (this.musicManager) this.musicManager.stop();
+            const ctx = this.soundManager && this.soundManager.audioContext;
+            if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {});
+        };
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                suspendAudio();
+            } else {
+                const ctx = this.soundManager && this.soundManager.audioContext;
+                if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+                if (this._musicWasOn && this.state === 'playing' && GAME_SETTINGS.soundEnabled) {
+                    this.musicManager.start();
+                }
+            }
+        });
+        window.addEventListener('pagehide', suspendAudio);
+
         // Prevent default touch behaviors ONLY during gameplay, so menus, the
         // leaderboard, gallery and story screens can still scroll on touch devices.
         document.addEventListener('touchmove', (e) => {
