@@ -256,3 +256,30 @@
   border: 1px solid var(--m-line);
   box-shadow: 0 0 28px rgba(50,184,198,.35), inset 0 0 18px rgba(50,184,198,.15);
 }
+
+/* ── Rotate-to-portrait prompt (co-op) ── */
+#rotate-screen {
+  position: fixed; inset: 0;
+  /* Below the disconnect / pause / game-over overlays (z 2000+) so those win. */
+  z-index: 1900;
+  display: flex; align-items: center; justify-content: center;
+  /* Advisory ONLY: translucent + click-through. A co-op match keeps running
+     host-authoritatively underneath, so this must never hide the action or
+     swallow input — rotating must not get you killed. */
+  background: rgba(6, 14, 26, 0.72);
+  pointer-events: none;
+}
+#rotate-screen.hidden { display: none; }
+#rotate-screen .rotate-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  color: var(--m-ink); text-align: center; padding: 24px;
+  font-family: 'Exo 2', sans-serif; font-size: 16px; letter-spacing: .03em;
+}
+#rotate-screen .rotate-inner b { color: var(--m-teal-bright); }
+#rotate-screen .rotate-inner svg {
+  color: var(--m-teal-bright);
+  filter: drop-shadow(0 0 14px rgba(50,184,198,.5));
+  animation: rotate-hint 2.2s ease-in-out infinite;
+}
+@keyframes rotate-hint { 0%,100% { transform: rotate(0); } 50% { transform: rotate(-90deg); } }
+@media (prefers-reduced-motion: reduce) { #rotate-screen .rotate-inner svg { animation: none; } }

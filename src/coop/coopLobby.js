@@ -15,6 +15,7 @@ export class CoopLobby {
     this.role = null;
     this.roomRef = null;
     this._listeners = [];
+    this._gen = 0;   // bumped on leave/re-entry to abort an in-flight connect
     this.el = {};
   }
 
@@ -45,6 +46,10 @@ export class CoopLobby {
   }
 
   show() {
+    // Fresh entry — drop any leftover listeners/refs and abort an in-flight connect.
+    this._detach();
+    this._gen++;
+    this.roomRef = null; this.code = null; this.role = null;
     this.game.state = 'coopLobby';
     document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
     this.el.screen.classList.remove('hidden');
@@ -68,18 +73,22 @@ export class CoopLobby {
 
   async createRoom() {
     if (!this._requireDb()) return;
+    this._gen++;
     this.role = 'host';
     this.myName = this._name();
-    // Find a free 4-char code.
-    let code = generateRoomCode();
-    for (let i = 0; i < 5; i++) {
-      const snap = await this.db.ref(`rooms/${code}/host`).once('value');
-      if (!snap.val()) break;
-      code = generateRoomCode();
+    // Atomically claim a free 4-char code (transaction avoids two hosts racing
+    // onto the same generated code).
+    let code = null;
+    for (let i = 0; i < 6; i++) {
+      const c = generateRoomCode();
+      const res = await this.db.ref(`rooms/${c}/host`).transaction(
+        cur => (cur === null ? { name: this.myName, ts: Date.now() } : undefined)
+      );
+      if (res.committed) { code = c; break; }
     }
+    if (!code) { this._setError('Δεν βρέθηκε ελεύθερο δωμάτιο, δοκίμασε ξανά.'); return; }
     this.code = code;
     this.roomRef = this.db.ref(`rooms/${code}`);
-    await this.roomRef.child('host').set({ name: this._name(), ts: Date.now() });
     await this.roomRef.child('status').set('waiting');
     // Clean the room if the host disconnects from the lobby.
     this.roomRef.onDisconnect().remove();
@@ -97,6 +106,11 @@ export class CoopLobby {
         this.partnerName = g.name;
         this.el.status.textContent = `Ο/Η ${g.name} συνδέθηκε! Έτοιμοι.`;
         this.el.startBtn.classList.remove('hidden');
+      } else {
+        // Guest left before start — can't begin alone.
+        this.partnerName = null;
+        this.el.status.textContent = 'Περιμένω συμπαίκτη…';
+        this.el.startBtn.classList.add('hidden');
       }
     });
     this._listeners.push([guestRef, 'value', cb]);
@@ -109,15 +123,21 @@ export class CoopLobby {
     const roomSnap = await this.db.ref(`rooms/${code}`).once('value');
     const room = roomSnap.val();
     if (!room || !room.host) { this._setError('Το δωμάτιο δεν βρέθηκε.'); return; }
-    if (room.guest) { this._setError('Το δωμάτιο είναι γεμάτο.'); return; }
     if (room.status !== 'waiting') { this._setError('Το παιχνίδι έχει ήδη ξεκινήσει.'); return; }
+
+    this._gen++;
+    this.myName = this._name();
+    // Atomically claim the guest seat (transaction avoids two guests racing into
+    // the same room; the second one is rejected rather than silently overwriting).
+    const res = await this.db.ref(`rooms/${code}/guest`).transaction(
+      cur => (cur === null ? { name: this.myName, ts: Date.now() } : undefined)
+    );
+    if (!res.committed) { this._setError('Το δωμάτιο είναι γεμάτο.'); return; }
 
     this.role = 'guest';
     this.code = code;
-    this.myName = this._name();
     this.partnerName = room.host.name;
     this.roomRef = this.db.ref(`rooms/${code}`);
-    await this.roomRef.child('guest').set({ name: this._name(), ts: Date.now() });
     this.roomRef.child('guest').onDisconnect().remove();
 
     this.el.choice.classList.add('hidden');
@@ -135,6 +155,9 @@ export class CoopLobby {
 
   async hostStart() {
     if (this.role !== 'host' || !this.roomRef) return;
+    // Re-verify a guest is actually present (it may have left after Start appeared).
+    const gSnap = await this.roomRef.child('guest').once('value');
+    if (!gSnap.val()) { this._setError('Ο συμπαίκτης αποχώρησε.'); this.el.startBtn.classList.add('hidden'); return; }
     const difficulty = this.el.difficulty.value || 'easy';
     await this.roomRef.child('difficulty').set(difficulty);
     await this.roomRef.child('status').set('playing');
@@ -142,6 +165,7 @@ export class CoopLobby {
   }
 
   async _beginGame(role) {
+    const myGen = this._gen;   // abort if the user leaves during the async connect
     // Stop listening to lobby presence; cancel the host room auto-remove so the
     // room survives into gameplay.
     this._detach();
@@ -150,8 +174,11 @@ export class CoopLobby {
     const difficulty = this.role === 'host'
       ? (this.el.difficulty.value || 'easy')
       : ((await this.roomRef.child('difficulty').once('value')).val() || 'easy');
+    if (myGen !== this._gen) return;   // left during the difficulty fetch
 
     const transport = await connectCoop(this.db, this.code, role);
+    if (myGen !== this._gen) { try { transport.close(); } catch (e) {} return; }   // left during connect
+
     const world = this.game.makeCoopWorld(role);
     const session = new CoopSession(transport, role, world);
     const names = this.role === 'host'
@@ -166,6 +193,7 @@ export class CoopLobby {
   }
 
   leave() {
+    this._gen++;   // abort any in-flight _beginGame connect
     this._detach();
     if (this.roomRef) {
       if (this.role === 'host') this.roomRef.remove();

@@ -14,6 +14,7 @@ export class RtdbTransport extends BaseTransport {
     this.outDir = role === 'host' ? 'fromHost' : 'fromGuest';
     this.inDir  = role === 'host' ? 'fromGuest' : 'fromHost';
     this._subs = [];
+    this.relay = true;   // server-relayed (not P2P) — the game ticks slower on this
   }
 
   async connect() {

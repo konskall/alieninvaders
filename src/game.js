@@ -333,6 +333,18 @@ export class Game {
             this.boss.canvasWidth = width;
             this.boss.canvasHeight = height;
         }
+
+        this._updateOrientationPrompt();
+    }
+
+    // Co-op uses a fixed PORTRAIT arena; in landscape on a phone it shrinks to a
+    // thin strip. Show a "rotate to portrait" overlay instead (co-op only).
+    _updateOrientationPrompt() {
+        const el = document.getElementById('rotate-screen');
+        if (!el) return;
+        const landscape = window.innerWidth > window.innerHeight;
+        const show = !!this.coopArenaActive && !!this.isMobileDevice && landscape && this.state === 'playing';
+        el.classList.toggle('hidden', !show);
     }
     
     detectMobile() {
@@ -1455,7 +1467,8 @@ escapeHtml(text) {
         
         // Destroy all enemies — lightweight: score + 2-3 shockwaves instead of per-enemy explosions
         this.enemies.forEach(enemy => {
-            this.score += enemy.points;
+            this.score += this.activeBonuses.multiplier ? enemy.points * 2 : enemy.points;
+            this.killCount++;   // super-weapon kills count toward the team total too
         });
         // A few large shockwaves to sell the effect without particle spam
         for (let i = 0; i < 3; i++) {
@@ -2479,11 +2492,14 @@ closeStoryScreen() {
             session.transport.onClose(() => this._coopDisconnected());
         }
         if (this._coopTimer) clearInterval(this._coopTimer);
+        // ~30 Hz over P2P WebRTC (smooth); back off to ~15 Hz on the RTDB relay,
+        // where every tick is a Firebase write (bandwidth/cost) on both sides.
+        const tickMs = (session.transport && session.transport.relay) ? 66 : 33;
         this._coopTimer = setInterval(() => {
             try { session.tick(); } catch (e) { /* transport closed */ }
             // Watchdog: no message from the peer for 4s => treat as disconnected.
             if (this.state === 'playing' && Date.now() - this._lastRecvAt > 4000) this._coopDisconnected();
-        }, 33);   // ~30 Hz: smoother remote motion than 15 Hz (P2P over WebRTC handles it)
+        }, tickMs);
     }
 
     _coopDisconnected() {
@@ -2527,7 +2543,9 @@ closeStoryScreen() {
     }
 
     startCoopGame(role, difficulty) {
-        GAME_SETTINGS.difficulty = difficulty;
+        // Guard against an unknown difficulty (e.g. a stale/garbled value over the
+        // wire) — an undefined DIFFICULTY_CONFIG entry would crash Enemy/Boss.
+        GAME_SETTINGS.difficulty = DIFFICULTY_CONFIG[difficulty] ? difficulty : 'easy';
         this.startGame();                       // full reset + 1 local ship + HUD + loop + state='playing'
         this.mode = role === 'host' ? 'coopHost' : 'coopGuest';
         // Switch to the fixed shared arena (letterboxed) BEFORE placing ships, so
@@ -2646,6 +2664,8 @@ closeStoryScreen() {
             pickups: this.bonusPickups.map(p => ({ x: p.x, y: p.y, type: p.type })),
             hud: { score: this.score, level: this.progressiveDifficulty.currentLevel, combo: this.combo, kills: this.killCount, over: this.state === 'gameOver',
                    wave: this.waveState.number,
+                   // Banner text only while it's actively showing on the host.
+                   banner: (this.currentTime - (this.waveState.bannerStartTime || 0) < WAVE_CONFIG.ANNOUNCE_DURATION) ? this.waveState.bannerText : '',
                    superCharge: this.superWeapon.charge, superReady: this.superWeapon.ready, superActive: this.superWeapon.active,
                    // Active team bonuses as { type: remainingMs } — inside hud because the
                    // wire protocol (buildState) only forwards the hud object, not extra keys.
@@ -2726,6 +2746,16 @@ closeStoryScreen() {
                 this.waveState.number = msg.hud.wave;
                 const wEl = document.getElementById('wave-number');
                 if (wEl) wEl.textContent = msg.hud.wave;
+            }
+            // Wave-announcement banner: re-trigger on the guest's own clock when a
+            // new banner arrives (host timestamps don't translate across devices).
+            const banner = msg.hud.banner || '';
+            if (banner && banner !== this._coopLastBanner) {
+                this._coopLastBanner = banner;
+                this.waveState.bannerText = banner;
+                this.waveState.bannerStartTime = Date.now();
+            } else if (!banner) {
+                this._coopLastBanner = '';
             }
             // Difficulty/level comes from the host (guest's local level logic is off).
             const lvl = msg.hud.level || 1;
