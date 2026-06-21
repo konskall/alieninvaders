@@ -27,7 +27,8 @@
 #start-screen::before,
 #settings-screen::before,
 #game-over-screen::before,
-#pause-screen::before {
+#pause-screen::before,
+.share-dialog::before {
   content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .55;
   background-image:
     radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,.7), transparent),
@@ -40,7 +41,8 @@
 #start-screen::after,
 #settings-screen::after,
 #game-over-screen::after,
-#pause-screen::after {
+#pause-screen::after,
+.share-dialog::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .06;
   background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(120,230,242,.4) 3px 4px);
   mix-blend-mode: screen;
@@ -57,13 +59,14 @@
 /* HUD corner brackets */
 .menu-shell::before, .menu-shell::after,
 .console-panel::before, .console-panel::after,
+.share-content::before, .share-content::after,
 .menu-brk {
   content: ""; position: absolute; width: 34px; height: 34px; pointer-events: none;
   border: 2px solid var(--m-teal); opacity: .55;
   filter: drop-shadow(0 0 6px rgba(50,184,198,.5));
 }
-.menu-shell::before, .console-panel::before { top: 0; left: 0; border-right: none; border-bottom: none; }
-.menu-shell::after, .console-panel::after { bottom: 0; right: 0; border-left: none; border-top: none; }
+.menu-shell::before, .console-panel::before, .share-content::before { top: 0; left: 0; border-right: none; border-bottom: none; }
+.menu-shell::after, .console-panel::after, .share-content::after { bottom: 0; right: 0; border-left: none; border-top: none; }
 .menu-brk.tr { top: 0; right: 0; border-left: none; border-bottom: none; }
 .menu-brk.bl { bottom: 0; left: 0; border-right: none; border-top: none; }
 

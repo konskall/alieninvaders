@@ -258,12 +258,11 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.9);
+  background: radial-gradient(120% 75% at 50% -5%, #11243a 0%, #081120 42%, #03060c 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
-  backdrop-filter: blur(10px);
 }
 
 .share-dialog.hidden {
@@ -272,13 +271,13 @@
 
 .share-content {
   position: relative;
-  background: linear-gradient(180deg, rgba(14, 28, 42, 0.97), rgba(7, 14, 24, 0.98));
-  border: 1px solid var(--m-line);
-  border-radius: 18px;
-  padding: 26px 22px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 30px 22px 22px;
   max-width: 380px;
   width: 90%;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(120, 230, 242, 0.08);
   font-family: 'Exo 2', sans-serif;
 }
 

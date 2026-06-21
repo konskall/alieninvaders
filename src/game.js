@@ -873,19 +873,15 @@ export class Game {
         const dialogHTML = `
             <div id="share-dialog" class="share-dialog">
                 <div class="share-content">
+                    <span class="menu-brk tr"></span><span class="menu-brk bl"></span>
                     <h2>Κοινοποίηση Σκορ</h2>
                     <div class="share-message">${message}</div>
                     <div class="share-buttons">
                          <button class="share-btn" data-platform="facebook">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-  <rect width="24" height="24" rx="4" fill="#1877F2"/>
-  <path fill="#FFFFFF" d="M15.117 8.325h-1.5c-.319 0-.761.227-.761.86v1.02h2.288l-.298 2.207h-1.99v7.318h-2.301v-7.318H8.659v-2.207h1.5V9.362c0-1.498.91-2.292 2.156-2.292.39 0 .729.029 1.102.07v1.156z"/>
-</svg> Facebook
+                            <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#1877F2"/><path fill="#fff" d="M15.4 12.6l.42-2.74h-2.63V8.08c0-.75.37-1.48 1.55-1.48h1.2V4.27s-1.09-.19-2.13-.19c-2.17 0-3.59 1.32-3.59 3.7v2.08H7.6v2.74h2.42V19h2.97v-6.4z"/></svg> Facebook
                         </button>
 						<button class="share-btn" data-platform="copy">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-  <path d="M9 2a2 2 0 012 2h1a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2v-.586l-2-2V6a2 2 0 012-2h2a2 2 0 011-2z"/>
-</svg> Αντιγραφή
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg> Αντιγραφή
                         </button>
                     </div>
                     <button class="share-close-btn">Κλείσιμο</button>
@@ -924,31 +920,36 @@ export class Game {
     }
     
     shareScore(platform, message) {
-        const url = window.location.href;
-        const encodedMessage = encodeURIComponent(message);
-        const encodedUrl = encodeURIComponent(url);
-        
-        switch (platform) {
-            case 'copy':
-                // Copy to clipboard
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(message).then(() => {
-                        alert('Αντιγράφηκε στο clipboard! ✅');
-                    }).catch(() => {
-                        alert('Αποτυχία αντιγραφής');
-                    });
-                }
-                break;
-            case 'facebook':
-                window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedMessage}`, '_blank');
-                break;
+        // Always share the live app URL (from og:url), not a local/dev address
+        const ogUrl = document.querySelector('meta[property="og:url"]');
+        const shareUrl = (ogUrl && ogUrl.content) || window.location.href;
+
+        if (platform === 'copy') {
+            const fullText = `${message}\n${shareUrl}`;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(fullText)
+                    .then(() => alert('Αντιγράφηκε! ✅'))
+                    .catch(() => alert('Αποτυχία αντιγραφής'));
+            }
+            return; // keep the dialog open so the user still sees the options
         }
-        
-        // Close dialog after sharing
+
+        if (platform === 'facebook') {
+            // On mobile, the native share sheet opens the Facebook app with the
+            // message + link; fall back to Facebook's web sharer on desktop.
+            if (navigator.share) {
+                navigator.share({ title: 'Alien Invaders', text: message, url: shareUrl })
+                    .catch(() => {});
+            } else {
+                window.open(
+                    `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
+                    '_blank', 'noopener'
+                );
+            }
+        }
+
         const dialog = document.getElementById('share-dialog');
-        if (dialog) {
-            setTimeout(() => dialog.remove(), 500);
-        }
+        if (dialog) setTimeout(() => dialog.remove(), 400);
     }
 
     gameOver() {
