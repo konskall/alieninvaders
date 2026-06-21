@@ -2399,10 +2399,35 @@ closeStoryScreen() {
         this.coopCode = code;
         this.coopDifficulty = difficulty;
         this.startCoopGame(role, difficulty);
+        this._lastRecvAt = Date.now();
+        this._coopEnded = false;
         if (this._coopTimer) clearInterval(this._coopTimer);
         this._coopTimer = setInterval(() => {
             try { session.tick(); } catch (e) { /* transport closed */ }
+            // Watchdog: no message from the peer for 4s => treat as disconnected.
+            if (this.state === 'playing' && Date.now() - this._lastRecvAt > 4000) this._coopDisconnected();
         }, 66);
+    }
+
+    _coopDisconnected() {
+        if (this._coopEnded) return;
+        this._coopEnded = true;
+        const wasHost = this.mode === 'coopHost';
+        if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
+        if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
+        if (wasHost) {
+            // Partner left — keep playing solo with the host ship.
+            const local = this.roster.players[this.roster.localIndex];
+            this.roster.players = [local];
+            this.roster.localIndex = 0;
+            this.mode = 'solo';
+            this.spawnFloatingText(CONFIG.canvas.width / 2, CONFIG.canvas.height / 2, 'Ο συμπαίκτης αποσυνδέθηκε', '#FF6347', 22);
+        } else {
+            // Host left — the guest cannot continue (host owned the simulation).
+            this.mode = 'solo';
+            alert('Ο host αποσυνδέθηκε — τέλος co-op.');
+            this.showMenu();
+        }
     }
 
     startCoopGame(role, difficulty) {
@@ -2485,6 +2510,7 @@ closeStoryScreen() {
     }
 
     coopApplyRemoteInput(msg) {
+        this._lastRecvAt = Date.now();
         const ship = this.coopRemoteShip;   // host: the guest ship
         if (ship && typeof msg.x === 'number') { ship.x = msg.x; ship.y = msg.y; }
     }
@@ -2504,6 +2530,7 @@ closeStoryScreen() {
 
     coopApplySnapshot(msg) {
         if (!msg) return;
+        this._lastRecvAt = Date.now();
         this.enemies = (msg.enemies || []).map(e => { const en = new Enemy(e.x, e.y, e.type); en.health = e.hp; en.x = e.x; en.y = e.y; return en; });
         this.bullets = (msg.bullets || []).map(b => { const bu = new Bullet(b.x, b.y, 0, 0, b.color, b.p, b.et); bu.x = b.x; bu.y = b.y; return bu; });
         this.homingBullets = (msg.homing || []).map(h => { const hb = new HomingBullet(h.x, h.y, h.x, h.y); hb.x = h.x; hb.y = h.y; return hb; });
