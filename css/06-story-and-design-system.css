@@ -1298,12 +1298,6 @@ select.form-control {
         transform: none;
     }
 }
-#story-btn {
-  display: block;
-  margin: 24px auto 0 auto; /* Top margin, κεντραρισμένο, ανώτερο spacing */
-  width: 220px;             /* Προαιρετικά ίδιο πλάτος με το κουμπί έναρξης */
-  text-align: center;
-}
 .story-play-link {
     color: #32b8c6;
     font-weight: 600;
@@ -1341,14 +1335,6 @@ select.form-control {
   display: none !important;
 }
 
-#gallery-btn {
-  display: block;
-  margin: 12px auto 0 auto;
-  width: 220px;
-  text-align: center;
-  padding: 12px 0 !important;
-  font-size: 16px !important;
-}
 
 .gallery-content {
   background: #262828;
