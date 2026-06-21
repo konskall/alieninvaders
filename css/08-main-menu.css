@@ -245,6 +245,20 @@
 }
 .coop-error { min-height: 16px; color: #ff6b6b; font: 600 12px/1.3 'Exo 2', sans-serif; text-align: center; }
 
+/* Guest joined → the Έναρξη button pops in and pulses so the host notices it. */
+@keyframes coop-start-pop { 0% { transform: scale(.9); } 55% { transform: scale(1.05); } 100% { transform: scale(1); } }
+@keyframes coop-start-glow {
+  0%, 100% { box-shadow: 0 8px 26px rgba(50,184,198,.40), 0 0 0 0 rgba(103,232,242,.55); }
+  50%      { box-shadow: 0 10px 34px rgba(50,184,198,.75), 0 0 28px 8px rgba(103,232,242,.6); }
+}
+#coop-start-btn.coop-start-ready {
+  animation: coop-start-pop .4s ease-out, coop-start-glow 1.15s ease-in-out .4s infinite;
+}
+#coop-status.coop-status-joined { color: #4ade80; font-weight: 700; text-shadow: 0 0 12px rgba(74,222,128,.5); }
+@media (prefers-reduced-motion: reduce) {
+  #coop-start-btn.coop-start-ready { animation: none; box-shadow: 0 0 26px 7px rgba(103,232,242,.55); }
+}
+
 /* ── Co-op end / disconnect message ── */
 #coop-msg-screen .console-panel { align-items: center; text-align: center; gap: 16px; }
 #coop-msg-screen .subtitle { margin: 0; }

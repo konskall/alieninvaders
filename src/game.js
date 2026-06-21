@@ -87,11 +87,10 @@ export class Game {
             comet: 0
         };
         
-        // Bonus pickup system
+        // Bonus pickup system (perks are per-ship now — stored on ship.bonuses)
         this.bonusPickups = [];
         this.lastBonusSpawn = 0;
-        this.activeBonuses = {};
-        
+
         // Progressive difficulty tracking
         this.progressiveDifficulty = {
             currentLevel: 1,
@@ -893,7 +892,6 @@ export class Game {
         this.combo = 0;
         this.killCount = 0;
         this.bonusPickups = [];
-        this.activeBonuses = {};
         CONFIG.player.fireRate = 150;
         this.lastBonusSpawn = 0;
         this.gameStartTime = Date.now();
@@ -1178,7 +1176,7 @@ export class Game {
         this.updateProgressiveDifficulty();
         
         // Highlight score when multiplier is active
-        if (this.activeBonuses.multiplier) {
+        if (this.player && this.player.bonuses && this.player.bonuses.multiplier) {
             scoreElement.style.color = '#FFD700';
             scoreElement.style.textShadow = '0 0 10px rgba(255, 215, 0, 0.8)';
         } else {
@@ -1481,6 +1479,16 @@ escapeHtml(text) {
         return (owner == null || owner === this.roster.localIndex) ? this.superWeapon : this.superWeaponRemote;
     }
 
+    // Serialize a ship's perks to { type: remainingMs } for the wire (per-ship in ships[]).
+    _serializeBonuses(b) {
+        const out = {}; const now = Date.now();
+        for (const [k, v] of Object.entries(b || {})) {
+            const rem = (v.duration || 0) - (now - (v.startTime || now));
+            if (rem > 0) out[k] = rem;   // skip a just-expired perk so it doesn't flash for a frame on the guest
+        }
+        return out;
+    }
+
     // `sup` is the super-weapon state to fire (each player has their own in co-op),
     // `originShip` is where the blast/FX originate. Defaults = the LOCAL player's.
     activateSuperWeapon(sup = this.superWeapon, originShip = this.player) {
@@ -1526,8 +1534,9 @@ escapeHtml(text) {
         }
         
         // Destroy all enemies — lightweight: score + 2-3 shockwaves instead of per-enemy explosions
+        const supMult = (originShip && originShip.bonuses && originShip.bonuses.multiplier) ? 2 : 1;  // the firing player's perk
         this.enemies.forEach(enemy => {
-            this.score += this.activeBonuses.multiplier ? enemy.points * 2 : enemy.points;
+            this.score += enemy.points * supMult;
             this.killCount++;   // super-weapon kills count toward the team total too
         });
         // A few large shockwaves to sell the effect without particle spam
@@ -1663,8 +1672,10 @@ escapeHtml(text) {
 
         this.player.move(dx, dy, CONFIG.canvas);
 
-        // Fire logic based on auto-fire setting
-        const hasMultiShot = !!this.activeBonuses.multiShot;
+        // Fire logic based on auto-fire setting. Perks are per-ship now.
+        const myBonuses = (this.player && this.player.bonuses) || {};
+        const hasMultiShot = !!myBonuses.multiShot;
+        const fireRate = myBonuses.rapidFire ? 75 : CONFIG.player.fireRate;
         let shouldFire = false;
         
         if (GAME_SETTINGS.autoFire) {
@@ -1676,7 +1687,7 @@ escapeHtml(text) {
         }
         
         if (shouldFire && this.mode !== 'coopGuest') {
-            const bullets = this.player.shoot(this.currentTime, hasMultiShot);
+            const bullets = this.player.shoot(this.currentTime, hasMultiShot, fireRate);
             if (bullets) {
                 const list = Array.isArray(bullets) ? bullets : [bullets];
                 for (const b of list) b.owner = this.roster.localIndex;   // tag for per-player super charge
@@ -1687,7 +1698,7 @@ escapeHtml(text) {
             // The host owns the real bullets, but the guest should still HEAR its
             // own ship firing. shoot() gates on the fire cadence; play the sound
             // when it would fire and discard the returned bullets.
-            if (this.player.shoot(this.currentTime, hasMultiShot)) this.soundManager.playerShoot();
+            if (this.player.shoot(this.currentTime, hasMultiShot, fireRate)) this.soundManager.playerShoot();
         }
     }
 
@@ -1901,7 +1912,8 @@ escapeHtml(text) {
                         
                         // Combo multiplier
                         const comboMultiplier = this.combo >= 10 ? 2 : this.combo >= 5 ? 1.5 : 1;
-                        const basePoints = this.activeBonuses.multiplier ? enemy.points * 2 : enemy.points;
+                        const ob = this.roster.players[bullet.owner] || this.player;   // multiplier of whoever's bullet got the kill
+                        const basePoints = (ob && ob.bonuses && ob.bonuses.multiplier) ? enemy.points * 2 : enemy.points;
                         const points = Math.floor(basePoints * comboMultiplier);
                         this.score += points;
                         this.combo++;
@@ -1988,9 +2000,9 @@ escapeHtml(text) {
                 this.screenShake.intensity = 0.25;
                 
                 // Check if shield is active
-                if (this.activeBonuses.shield) {
+                if (this.player.bonuses.shield) {
                     // Shield absorbs hit
-                    delete this.activeBonuses.shield;
+                    delete this.player.bonuses.shield;
                     this.updateActiveBonusesUI();
                     
                     // Create shield break effect
@@ -2039,8 +2051,8 @@ escapeHtml(text) {
                 this.screenShake.intensity = 0.25;
 
                 // Check if shield is active
-                if (this.activeBonuses.shield) {
-                    delete this.activeBonuses.shield;
+                if (this.player.bonuses.shield) {
+                    delete this.player.bonuses.shield;
                     this.updateActiveBonusesUI();
 
                     for (let k = 0; k < 20; k++) {
@@ -2124,8 +2136,8 @@ escapeHtml(text) {
                     this.vibrationManager.damage();
                     this.screenShake.intensity = 0.25;
                     this.combo = 0;
-                    if (this.activeBonuses.shield) {
-                        delete this.activeBonuses.shield;
+                    if (this.player.bonuses.shield) {
+                        delete this.player.bonuses.shield;
                         this.updateActiveBonusesUI();
                         for (let k = 0; k < 20; k++) {
                             this.particles.push(new Particle(this.player.x, this.player.y, '#00CCFF', 'glow'));
@@ -2153,8 +2165,8 @@ escapeHtml(text) {
                 this.vibrationManager.damage();
                 this.screenShake.intensity = 0.35;
                 this.combo = 0;
-                if (this.activeBonuses.shield) {
-                    delete this.activeBonuses.shield;
+                if (this.player.bonuses.shield) {
+                    delete this.player.bonuses.shield;
                     this.updateActiveBonusesUI();
                 } else {
                     this.player.makeInvincible();
@@ -2270,8 +2282,8 @@ escapeHtml(text) {
             // Draw every ship in the roster (1 in solo, 2 in co-op).
             for (const ship of this.roster.players) {
                 if (!ship || ship.health <= 0) continue;
-                // Team shield protects both ships, so draw the ring on each one.
-                if (this.activeBonuses.shield) {
+                // Each ship shows its OWN shield ring (perks are individual now).
+                if (ship.bonuses && ship.bonuses.shield) {
                     this.ctx.save();
                     const shieldPulse = 0.7 + Math.sin(Date.now() * 0.005) * 0.3;
                     this.ctx.globalAlpha = shieldPulse;
@@ -2357,11 +2369,12 @@ escapeHtml(text) {
             this.particles.push(new Particle(bonus.x, bonus.y, bonus.config.color, 'glow'));
         }
 
-        // Apply bonus effect. shield/rapidFire/multiShot/multiplier are team-wide;
-        // health heals the SHIP that actually picked it up (individual lives).
+        // INDIVIDUAL perks — only the ship that grabbed it gets the effect
+        // (health already heals just the collector).
+        const b = ship ? ship.bonuses : null;
         switch (bonus.type) {
             case 'shield':
-                this.activeBonuses.shield = { startTime: Date.now(), duration: 15000 };
+                if (b) b.shield = { startTime: Date.now(), duration: 15000 };
                 break;
             case 'health':
                 if (ship && ship.health < CONFIG.game.initialHealth) {
@@ -2370,37 +2383,35 @@ escapeHtml(text) {
                 }
                 break;
             case 'rapidFire':
-                this.activeBonuses.rapidFire = { startTime: Date.now(), duration: 10000 };
-                CONFIG.player.fireRate = 75;
+                if (b) b.rapidFire = { startTime: Date.now(), duration: 10000 };
                 break;
             case 'multiShot':
-                this.activeBonuses.multiShot = { startTime: Date.now(), duration: 10000 };
+                if (b) b.multiShot = { startTime: Date.now(), duration: 10000 };
                 break;
             case 'multiplier':
-                this.activeBonuses.multiplier = { startTime: Date.now(), duration: 15000 };
+                if (b) b.multiplier = { startTime: Date.now(), duration: 15000 };
                 break;
         }
-        
+
         this.updateActiveBonusesUI();
     }
     
     updateActiveBonuses() {
         const now = Date.now();
         let needsUpdate = false;
-        
-        // Check for expired bonuses
-        for (let [type, data] of Object.entries(this.activeBonuses)) {
-            if (data.duration && now - data.startTime >= data.duration) {
-                delete this.activeBonuses[type];
-                needsUpdate = true;
-                
-                // Reset effects
-                if (type === 'rapidFire') {
-                    CONFIG.player.fireRate = 150;
+
+        // Expire each ship's own perks (per-ship; rapidFire is applied via the
+        // per-ship fire rate at fire time, so there's no global to reset).
+        for (const ship of this.roster.players) {
+            if (!ship || !ship.bonuses) continue;
+            for (const [type, data] of Object.entries(ship.bonuses)) {
+                if (data.duration && now - data.startTime >= data.duration) {
+                    delete ship.bonuses[type];
+                    if (ship === this.player) needsUpdate = true;
                 }
             }
         }
-        
+
         if (needsUpdate) {
             this.updateActiveBonusesUI();
         }
@@ -2409,10 +2420,10 @@ escapeHtml(text) {
     updateActiveBonusesUI() {
         const container = document.getElementById('bonuses-container');
         container.innerHTML = '';
-        
+
         const now = Date.now();
-        
-        for (let [type, data] of Object.entries(this.activeBonuses)) {
+        const myBonuses = (this.player && this.player.bonuses) || {};   // HUD shows the LOCAL player's perks
+        for (let [type, data] of Object.entries(myBonuses)) {
             const bonusDiv = document.createElement('div');
             bonusDiv.className = `bonus-indicator ${type === 'rapidFire' ? 'rapid-fire' : type === 'multiShot' ? 'multi-shot' : type}`;
             
@@ -2663,7 +2674,8 @@ closeStoryScreen() {
         const ship = this.coopRemoteShip;
         if (!ship || ship.health <= 0) return;
         if (ship._wantsFire === false) return;   // guest turned auto-fire off and isn't holding fire
-        const bullets = ship.shoot(this.currentTime, !!this.activeBonuses.multiShot);
+        const rate = (ship.bonuses && ship.bonuses.rapidFire) ? 75 : CONFIG.player.fireRate;
+        const bullets = ship.shoot(this.currentTime, !!(ship.bonuses && ship.bonuses.multiShot), rate);
         if (!bullets) return;
         const list = Array.isArray(bullets) ? bullets : [bullets];
         const owner = 1 - this.roster.localIndex;   // the partner's index; charges their gauge
@@ -2676,8 +2688,8 @@ closeStoryScreen() {
     _hitShip(ship) {
         this.screenShake.intensity = Math.max(this.screenShake.intensity, 0.25);
         this.combo = 0;
-        if (this.activeBonuses.shield) {
-            delete this.activeBonuses.shield;
+        if (ship.bonuses && ship.bonuses.shield) {   // the hit ship's OWN shield
+            delete ship.bonuses.shield;
             this.updateActiveBonusesUI();
             for (let k = 0; k < 20; k++) this.particles.push(new Particle(ship.x, ship.y, '#00CCFF', 'glow'));
             return;
@@ -2740,7 +2752,7 @@ closeStoryScreen() {
 
     coopBuildSnapshot() {
         return {
-            ships: this.roster.players.map((s, i) => ({ i, x: s.x, y: s.y, health: s.health, alive: s.health > 0, inv: !!s.invincible })),
+            ships: this.roster.players.map((s, i) => ({ i, x: s.x, y: s.y, health: s.health, alive: s.health > 0, inv: !!s.invincible, bonuses: this._serializeBonuses(s.bonuses) })),
             enemies: this.enemies.map(e => ({ type: e.typeName, x: e.x, y: e.y, hp: e.health })),
             bullets: this.bullets.map(b => ({ x: b.x, y: b.y, color: b.color, p: !!b.isPlayerBullet, et: b.enemyType })),
             homing: this.homingBullets.map(h => ({ x: h.x, y: h.y })),
@@ -2752,11 +2764,7 @@ closeStoryScreen() {
                    banner: (this.currentTime - (this.waveState.bannerStartTime || 0) < WAVE_CONFIG.ANNOUNCE_DURATION) ? this.waveState.bannerText : '',
                    // Send the PARTNER's gauge (superWeaponRemote = the guest's own) so the
                    // guest sees and controls its own super, independent of the host's.
-                   superCharge: this.superWeaponRemote.charge, superReady: this.superWeaponRemote.ready, superActive: this.superWeaponRemote.active,
-                   // Active team bonuses as { type: remainingMs } — inside hud because the
-                   // wire protocol (buildState) only forwards the hud object, not extra keys.
-                   bonuses: Object.fromEntries(Object.entries(this.activeBonuses).map(
-                       ([k, v]) => [k, Math.max(0, (v.duration || 0) - (Date.now() - (v.startTime || Date.now())))])) },
+                   superCharge: this.superWeaponRemote.charge, superReady: this.superWeaponRemote.ready, superActive: this.superWeaponRemote.active },
             events: [],
         };
     }
@@ -2805,27 +2813,24 @@ closeStoryScreen() {
         if (bossSig !== this._coopBossSig) { this._coopBossSig = bossSig; this.updateBossHUD(); }
 
         const localIdx = this.roster.localIndex;
+        const nowB = Date.now();
         (msg.ships || []).forEach(s => {
             const ship = this.roster.players[s.i];
             if (!ship) return;
             ship.health = s.health;
             ship.invincible = !!s.inv;   // host-authoritative i-frames -> ship blinks on the guest too
+            // Per-ship perks (synced) so each ship draws its OWN shield ring / fires its own way.
+            ship.bonuses = {};
+            if (s.bonuses) for (const [k, rem] of Object.entries(s.bonuses)) ship.bonuses[k] = { startTime: nowB, duration: rem };
             if (s.i !== localIdx && Number.isFinite(s.x) && Number.isFinite(s.y)) {
                 ship.x = Math.max(0, Math.min(CONFIG.canvas.width, s.x));   // remote ship pos from host (clamped); own ship stays local
                 ship.y = Math.max(0, Math.min(CONFIG.canvas.height, s.y));
             }
         });
 
-        // Mirror team bonuses (shield/rapidFire/multiShot/multiplier) so the guest
-        // renders the shield ring, the 2x-score highlight and the active-bonus icons.
-        this.activeBonuses = {};
-        const nowB = Date.now();
-        const bonusMap = (msg.hud && msg.hud.bonuses) || {};
-        for (const [k, rem] of Object.entries(bonusMap)) this.activeBonuses[k] = { startTime: nowB, duration: rem };
-        const bonusSig = Object.keys(this.activeBonuses).sort().join(',');
+        // The LOCAL player's perks drive the HUD; rebuild only when they change.
+        const bonusSig = Object.keys((this.player && this.player.bonuses) || {}).sort().join(',');
         if (bonusSig !== this._coopBonusSig) { this._coopBonusSig = bonusSig; this.updateActiveBonusesUI(); }
-        // Match the guest's local fire-sound cadence to a synced team rapidFire.
-        CONFIG.player.fireRate = this.activeBonuses.rapidFire ? 75 : 150;
 
         if (msg.hud) {
             this.score = msg.hud.score; this.displayScore = msg.hud.score; this.combo = msg.hud.combo || 0; this.killCount = msg.hud.kills || 0;
@@ -2864,7 +2869,7 @@ closeStoryScreen() {
             }
         }
         // Only rebuild the HUD when something it shows changed (runs ~30x/sec).
-        const hudSig = this.score + '|' + (this.player ? this.player.health : 0) + '|' + this.combo + '|' + this.killCount + '|' + !!this.activeBonuses.multiplier;
+        const hudSig = this.score + '|' + (this.player ? this.player.health : 0) + '|' + this.combo + '|' + this.killCount + '|' + !!(this.player && this.player.bonuses && this.player.bonuses.multiplier);
         if (hudSig !== this._coopHudSig) { this._coopHudSig = hudSig; this.updateHUD(); }
         if (msg.hud && msg.hud.over && this.state === 'playing') this.gameOver();
     }

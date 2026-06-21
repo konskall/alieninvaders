@@ -63,6 +63,8 @@ export class CoopLobby {
     this.el.choice.classList.remove('hidden');
     this.el.waiting.classList.add('hidden');
     this.el.startBtn.classList.add('hidden');
+    this.el.startBtn.classList.remove('coop-start-ready');
+    if (this.el.status) this.el.status.classList.remove('coop-status-joined');
   }
 
   _setError(msg) { if (this.el.error) this.el.error.textContent = msg; }
@@ -106,13 +108,17 @@ export class CoopLobby {
       const g = snap.val();
       if (g && g.name) {
         this.partnerName = g.name;
-        this.el.status.textContent = `Ο/Η ${g.name} συνδέθηκε! Έτοιμοι.`;
+        this.el.status.textContent = `✅ Ο/Η ${g.name} συνδέθηκε — έτοιμοι!`;
+        this.el.status.classList.add('coop-status-joined');
         this.el.startBtn.classList.remove('hidden');
+        this.el.startBtn.classList.add('coop-start-ready');   // pop + pulse to grab the eye
       } else {
         // Guest left before start — can't begin alone.
         this.partnerName = null;
         this.el.status.textContent = 'Περιμένω συμπαίκτη…';
+        this.el.status.classList.remove('coop-status-joined');
         this.el.startBtn.classList.add('hidden');
+        this.el.startBtn.classList.remove('coop-start-ready');
       }
     });
     this._listeners.push([guestRef, 'value', cb]);

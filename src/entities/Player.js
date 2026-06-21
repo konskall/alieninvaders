@@ -14,6 +14,7 @@ export class Player {
         this.invincible = false;
         this.invincibleTimer = 0;
         this.INVINCIBLE_DURATION = 120;
+        this.bonuses = {};   // per-ship perks (shield/rapidFire/multiShot/multiplier) — individual, not shared
     }
 
     move(dx, dy, canvas) {
@@ -35,8 +36,8 @@ export class Player {
         this.y = Math.max(this.size * 1.5, Math.min(canvas.height - this.size * 1.5, this.y));
     }
 
-    shoot(currentTime, hasMultiShot = false) {
-        if (currentTime - this.lastFireTime >= CONFIG.player.fireRate) {
+    shoot(currentTime, hasMultiShot = false, fireRate = CONFIG.player.fireRate) {
+        if (currentTime - this.lastFireTime >= fireRate) {
             this.lastFireTime = currentTime;
 
             if (hasMultiShot) {
