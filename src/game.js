@@ -2556,6 +2556,11 @@ closeStoryScreen() {
     }
 
     stopCoop() {
+        // Mark ended FIRST: closing the transport below fires our own onClose
+        // handler (transport.close() -> _emitClose), which would otherwise run
+        // _coopDisconnected() and pop the "disconnected" overlay on an
+        // intentional leave (menu / restart).
+        this._coopEnded = true;
         if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
         if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
         this.mode = 'solo';
