@@ -71,7 +71,11 @@
 @keyframes menu-pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
 
 /* logo lockup */
-.menu-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 2px 0 4px; }
+.menu-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 2px 0 4px; cursor: pointer; transition: transform .2s ease; }
+.menu-brand:hover { transform: translateY(-2px); }
+.menu-brand:hover .menu-mark { filter: drop-shadow(0 0 16px rgba(103,232,242,.85)); }
+.menu-brand:hover .menu-wordmark .l1 { text-shadow: 0 0 24px rgba(103,232,242,.6); }
+.menu-brand:focus-visible { outline: 2px solid var(--m-teal-bright); outline-offset: 10px; border-radius: 10px; }
 .menu-mark { color: var(--m-teal); filter: drop-shadow(0 0 12px rgba(50,184,198,.55)); }
 .menu-wordmark { text-align: center; line-height: .92; }
 .menu-wordmark .l1, .menu-wordmark .l2 {

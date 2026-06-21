@@ -33,7 +33,7 @@ export function initCreditsSplash() {
     for (let i = 0; i < STAR_COUNT; i++) stars.push(makeStar());
   }
 
-  const startT = performance.now();
+  let startT = 0, rafId = null;
   const WARP_MS = 1700, WARP_SPEED = 30, DRIFT_SPEED = 0.4, STOP_MS = 3200;
   function speedAt(t) {
     if (reduce) return 0;
@@ -62,7 +62,7 @@ export function initCreditsSplash() {
       }
     }
     // once we've "arrived", the opaque key-art covers the warp — stop to save CPU
-    if (t < STOP_MS) requestAnimationFrame(render);
+    if (t < STOP_MS) rafId = requestAnimationFrame(render); else rafId = null;
   }
   function staticField() {
     ctx.fillStyle = '#03060c'; ctx.fillRect(0, 0, w, h);
@@ -75,8 +75,16 @@ export function initCreditsSplash() {
     }
   }
 
-  init();
-  if (reduce) staticField(); else requestAnimationFrame(render);
+  function start() {
+    init();
+    startT = performance.now();
+    if (reduce) { staticField(); return; }
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(render);
+  }
+  start();
+  // expose a replay so the menu logo can re-trigger the intro
+  window.replayCreditsSplash = start;
 
   let rt;
   window.addEventListener('resize', () => {

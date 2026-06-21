@@ -149,17 +149,15 @@ export class Game {
             });
         });
         
-        // Show credits splash screen, then auto-transition to the main menu
-        const creditsShownAt = Date.now();
-        setTimeout(() => {
-            this.transitionFromCreditsToMenu();
-        }, 10000);
+        // Show credits splash, then auto-transition to the menu (re-armable so
+        // the menu logo can replay the intro).
+        this.armCreditsAdvance();
 
         // Allow tap to skip — but ignore stray taps during the opening so the
         // cinematic intro (warp -> reveal -> title) always plays first.
         const creditsScreen = document.getElementById('credits-screen');
         creditsScreen.addEventListener('click', () => {
-            if (this.state === 'credits' && Date.now() - creditsShownAt > 1500) {
+            if (this.state === 'credits' && Date.now() - this.creditsShownAt > 1500) {
                 this.transitionFromCreditsToMenu();
             }
         });
@@ -194,6 +192,28 @@ export class Game {
 
         document.getElementById('credits-screen').classList.add('hidden');
         this.showMenu();
+    }
+
+    armCreditsAdvance() {
+        // (re)start the 10s auto-advance from the credits splash to the menu
+        this.creditsShownAt = Date.now();
+        const token = this.creditsShownAt;
+        setTimeout(() => {
+            if (this.state === 'credits' && this.creditsShownAt === token) {
+                this.transitionFromCreditsToMenu();
+            }
+        }, 10000);
+    }
+
+    showCredits() {
+        // Replay the cinematic splash (e.g. tapping the menu logo)
+        this.state = 'credits';
+        ['start-screen', 'settings-screen', 'game-over-screen', 'pause-screen', 'story-screen',
+         'gallery-screen', 'hud', 'active-bonuses', 'touch-controls', 'leaderboard-modal']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+        document.getElementById('credits-screen').classList.remove('hidden');
+        if (window.replayCreditsSplash) window.replayCreditsSplash();
+        this.armCreditsAdvance();
     }
 
     showMenu() {
@@ -443,6 +463,14 @@ export class Game {
         document.getElementById('menu-settings-btn').addEventListener('click', () => {
             this.openSettings('menu');
         });
+        // Tap the menu logo to replay the cinematic intro
+        const menuBrand = document.getElementById('menu-brand-btn');
+        if (menuBrand) {
+            menuBrand.addEventListener('click', () => this.showCredits());
+            menuBrand.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.showCredits(); }
+            });
+        }
 
         // Pause-screen buttons
         document.getElementById('resume-btn').addEventListener('click', () => {
