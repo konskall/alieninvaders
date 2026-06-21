@@ -226,6 +226,7 @@ export class Game {
 
     showMenu() {
         this.stopCoop();
+        this._lastWasCoop = false;
         this.state = 'menu';
         ['game-over-screen', 'pause-screen', 'settings-screen', 'story-screen',
          'gallery-screen', 'hud', 'active-bonuses', 'touch-controls', 'leaderboard-modal']
@@ -798,6 +799,7 @@ export class Game {
 
     startGame() {
         this.state = 'playing';
+        this._lastWasCoop = false;
         this.keys = {};
         this.score = 0;
         this.enemies = [];
@@ -1045,7 +1047,14 @@ export class Game {
     this.soundManager.gameOver();
     this.musicManager.stop();
     document.getElementById('final-score').textContent = this.score;
-    if (this.mode === 'solo') this.setupGameOverScoreEntry();
+    if (this.mode === 'solo') {
+        this.setupGameOverScoreEntry();
+    } else {
+        this._lastWasCoop = true;
+        if (this.mode === 'coopHost') {
+            this.leaderboardManager.addCoopScore(this.coopNames || 'Co-op', this.score, this.progressiveDifficulty.currentLevel);
+        }
+    }
     document.getElementById('game-over-screen').classList.remove('hidden');
     document.getElementById('hud').classList.add('hidden');
     document.getElementById('active-bonuses').classList.add('hidden');
@@ -1110,12 +1119,14 @@ export class Game {
             livesContainer.appendChild(life);
         }
     }
-showLeaderboardModal() {
+showLeaderboardModal(coop = this._lastWasCoop) {
     const modal = document.getElementById('leaderboard-modal');
+    const title = modal.querySelector('.modal-header h2');
+    if (title) title.textContent = coop ? 'Co-op Κατάταξη' : 'Λίστα Κορυφαίων Παικτών';
 
     // View-only — name entry now lives in the Game Over screen
     modal.classList.remove('hidden');
-    this.updateLeaderboardDisplay();
+    this.updateLeaderboardDisplay(coop);
 
     // Κλείσιμο modal
     const closeBtn = modal.querySelector('.modal-close');
@@ -1130,9 +1141,9 @@ showLeaderboardModal() {
     modal.addEventListener('click', closeOnBackdrop);
 }
 
-updateLeaderboardDisplay() {
+updateLeaderboardDisplay(coop = false) {
     const leaderboardList = document.getElementById('leaderboard-list');
-    const scores = this.leaderboardManager.getScores();
+    const scores = coop ? this.leaderboardManager.getCoopScores() : this.leaderboardManager.getScores();
     
     leaderboardList.innerHTML = '';
     
@@ -1155,7 +1166,7 @@ updateLeaderboardDisplay() {
         entryEl.innerHTML = `
             <div class="leaderboard-rank ${rankClass}">${medal || rank}</div>
             <div class="leaderboard-info">
-                <div class="leaderboard-name">${this.escapeHtml(entry.name)}</div>
+                <div class="leaderboard-name">${this.escapeHtml(coop ? entry.names : entry.name)}</div>
                 <div class="leaderboard-meta">
                     <span>📊 Level ${this.escapeHtml(String(entry.level ?? ''))}</span>
                     <span>${this.escapeHtml(String(entry.date ?? ''))}</span>
@@ -2393,11 +2404,12 @@ closeStoryScreen() {
         };
     }
 
-    beginCoop(session, role, difficulty, code) {
+    beginCoop(session, role, difficulty, code, names) {
         this.coopSession = session;
         this.coopRole = role;
         this.coopCode = code;
         this.coopDifficulty = difficulty;
+        this.coopNames = names || 'Co-op';
         this.startCoopGame(role, difficulty);
         this._lastRecvAt = Date.now();
         this._coopEnded = false;

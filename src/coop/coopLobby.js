@@ -69,6 +69,7 @@ export class CoopLobby {
   async createRoom() {
     if (!this._requireDb()) return;
     this.role = 'host';
+    this.myName = this._name();
     // Find a free 4-char code.
     let code = generateRoomCode();
     for (let i = 0; i < 5; i++) {
@@ -93,6 +94,7 @@ export class CoopLobby {
     const cb = guestRef.on('value', (snap) => {
       const g = snap.val();
       if (g && g.name) {
+        this.partnerName = g.name;
         this.el.status.textContent = `Ο/Η ${g.name} συνδέθηκε! Έτοιμοι.`;
         this.el.startBtn.classList.remove('hidden');
       }
@@ -112,6 +114,8 @@ export class CoopLobby {
 
     this.role = 'guest';
     this.code = code;
+    this.myName = this._name();
+    this.partnerName = room.host.name;
     this.roomRef = this.db.ref(`rooms/${code}`);
     await this.roomRef.child('guest').set({ name: this._name(), ts: Date.now() });
     this.roomRef.child('guest').onDisconnect().remove();
@@ -151,7 +155,10 @@ export class CoopLobby {
     await transport.connect();
     const world = this.game.makeCoopWorld(role);
     const session = new CoopSession(transport, role, world);
-    this.game.beginCoop(session, role, difficulty, this.code);
+    const names = this.role === 'host'
+      ? `${this.myName || 'Host'} & ${this.partnerName || 'Guest'}`
+      : `${this.partnerName || 'Host'} & ${this.myName || 'Guest'}`;
+    this.game.beginCoop(session, role, difficulty, this.code, names);
   }
 
   _detach() {
