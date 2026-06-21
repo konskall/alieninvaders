@@ -176,7 +176,10 @@ export class CoopLobby {
     // Stop listening to lobby presence; cancel the host room auto-remove so the
     // room survives into gameplay.
     this._detach();
+    // Cancel the lobby-phase auto-removal symmetrically so a transient Firebase blip
+    // during gameplay doesn't delete the room (host) or the guest seat.
     if (this.role === 'host') this.roomRef.onDisconnect().cancel();
+    else this.roomRef.child('guest').onDisconnect().cancel();
     this._setConnecting(true);   // visible feedback while the link establishes (can take a few s)
 
     try {

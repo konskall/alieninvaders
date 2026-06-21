@@ -1081,8 +1081,15 @@ export class Game {
     // Co-op: a single ship dying does not end the game while a partner survives.
     if (this.mode !== 'solo' && !this.roster.isGameOver()) { this.updateHUD(); return; }
     this.state = 'gameOver';
-    // Co-op ended cleanly — stop the watchdog from popping the "disconnected" overlay.
-    if (this.mode !== 'solo') this._coopEnded = true;
+    if (this.mode !== 'solo') {
+        // Co-op ended cleanly — stop the watchdog from popping the "disconnected" overlay.
+        this._coopEnded = true;
+        // Push ONE final over:true snapshot so the partner ends cleanly, then stop the
+        // netcode loop — otherwise it keeps writing ~15-30x/sec for the whole game-over
+        // screen (Firebase bandwidth/quota on the relay path).
+        try { if (this.coopSession) this.coopSession.tick(); } catch (e) {}
+        if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
+    }
     if (this.boss) {
         this.boss = null;
         this.homingBullets = [];
@@ -1817,7 +1824,8 @@ escapeHtml(text) {
         // Update bonus pickups (in-place swap+pop)
         for (let i = this.bonusPickups.length - 1; i >= 0; i--) {
             const bonus = this.bonusPickups[i];
-            bonus.update(CONFIG.canvas, this.player.x, this.player.y);
+            const mag = this._aimShip(bonus.x, bonus.y);   // magnet toward the nearest alive ship
+            bonus.update(CONFIG.canvas, mag.x, mag.y);
 
             // Co-op: EITHER ship can collect. Check every alive ship, not just the
             // host's — otherwise the guest can stand on a perk and never get it.
@@ -2547,6 +2555,9 @@ closeStoryScreen() {
             this.roster.players = [local];
             this.roster.localIndex = 0;
             this.mode = 'solo';
+            // Re-tag any in-flight partner bullets to the surviving local gauge so
+            // their kills don't keep charging the now-orphaned superWeaponRemote.
+            for (const b of this.bullets) if (b.owner !== 0) b.owner = 0;
             this.spawnFloatingText(CONFIG.canvas.width / 2, CONFIG.canvas.height / 2, 'Ο συμπαίκτης αποσυνδέθηκε', '#FF6347', 22);
         } else {
             // Host left — the guest cannot continue (host owned the simulation).
@@ -2691,7 +2702,12 @@ closeStoryScreen() {
     coopApplyRemoteInput(msg) {
         this._lastRecvAt = Date.now();
         const ship = this.coopRemoteShip;   // host: the guest ship
-        if (ship && typeof msg.x === 'number') { ship.x = msg.x; ship.y = msg.y; }
+        if (ship && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
+            // Clamp to the arena — a garbled/hostile NaN or huge value would otherwise
+            // wedge the partner ship off-screen and break all collision math.
+            ship.x = Math.max(0, Math.min(CONFIG.canvas.width, msg.x));
+            ship.y = Math.max(0, Math.min(CONFIG.canvas.height, msg.y));
+        }
         if (ship) ship._wantsFire = msg.firing !== false;   // honor the guest's auto-fire / fire-key choice
         // Guest fired ITS OWN super weapon -> run it on the guest's gauge, originating
         // at the guest ship.
@@ -2770,7 +2786,10 @@ closeStoryScreen() {
             if (!ship) return;
             ship.health = s.health;
             ship.invincible = !!s.inv;   // host-authoritative i-frames -> ship blinks on the guest too
-            if (s.i !== localIdx) { ship.x = s.x; ship.y = s.y; }   // remote ship pos from host; own ship stays local
+            if (s.i !== localIdx && Number.isFinite(s.x) && Number.isFinite(s.y)) {
+                ship.x = Math.max(0, Math.min(CONFIG.canvas.width, s.x));   // remote ship pos from host (clamped); own ship stays local
+                ship.y = Math.max(0, Math.min(CONFIG.canvas.height, s.y));
+            }
         });
 
         // Mirror team bonuses (shield/rapidFire/multiShot/multiplier) so the guest
