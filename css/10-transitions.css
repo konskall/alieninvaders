@@ -1,0 +1,18 @@
+/* ============================================================
+   Smooth screen transitions — every screen fades in when shown.
+   Screens toggle via display:none (.hidden), so we trigger a CSS
+   animation whenever a .screen starts matching :not(.hidden).
+   (Modals already fade in via .modal's own animation.)
+   ============================================================ */
+@keyframes ui-screen-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.screen:not(.hidden) {
+  animation: ui-screen-in 0.35s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen:not(.hidden) { animation: none; }
+}
