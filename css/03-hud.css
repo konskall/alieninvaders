@@ -10,6 +10,8 @@
   justify-content: space-between;
   align-items: flex-start;
   padding: var(--space-20);
+  /* iOS (viewport-fit=cover): keep the HUD clear of the notch / status bar */
+  padding-top: max(var(--space-20), env(safe-area-inset-top));
   z-index: 5;
   pointer-events: none;
 }

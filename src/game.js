@@ -106,6 +106,7 @@ export class Game {
         this.score = 0;
         this.roster = new CoopRoster();
         this.mode = 'solo';   // 'solo' | 'coopHost' | 'coopGuest' (set by later phases)
+        this.coopArenaActive = false;   // true => canvas uses the fixed co-op arena (letterboxed)
         this.enemies = [];
         this.bullets = [];
         this.particles = [];
@@ -229,7 +230,7 @@ export class Game {
         this._lastWasCoop = false;
         this.state = 'menu';
         ['game-over-screen', 'pause-screen', 'settings-screen', 'story-screen',
-         'gallery-screen', 'coop-screen', 'hud', 'active-bonuses', 'touch-controls', 'leaderboard-modal']
+         'gallery-screen', 'coop-screen', 'coop-msg-screen', 'hud', 'active-bonuses', 'touch-controls', 'leaderboard-modal']
             .forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.classList.add('hidden');
@@ -276,34 +277,48 @@ export class Game {
 
     setupCanvas() {
         const isMobile = this.isMobileDevice || ('ontouchstart' in window && window.innerWidth <= 1024);
-        let width = window.innerWidth;
-        let height = window.innerHeight;
-
-        if (!isMobile) {
-            const maxW = 750;
-            width = Math.min(width, maxW);
-        }
+        const coop = !!this.coopArenaActive;
 
         // Logical (CSS-pixel) play area — all game logic and drawing use these.
+        // Co-op uses a fixed shared arena so both devices agree on coordinates;
+        // solo fills the screen (desktop capped at 750 wide).
+        let width, height;
+        if (coop) {
+            width = CONFIG.coopArena.width;
+            height = CONFIG.coopArena.height;
+        } else {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            if (!isMobile) width = Math.min(width, 750);
+        }
+
         CONFIG.canvas.width = width;
         CONFIG.canvas.height = height;
 
         // Nebula gradients depend on size — rebuild them here, not every frame.
         this.buildNebulaGradients();
 
+        // Display size: solo fills its logical area 1:1; co-op letterbox-fits
+        // ("contain") the fixed arena into the viewport so the whole field shows.
+        const scale = coop
+            ? Math.min(window.innerWidth / width, window.innerHeight / height)
+            : 1;
+        const cssW = width * scale;
+        const cssH = height * scale;
+
         // Back the canvas with a device-pixel-scaled buffer (crisp on Retina /
         // hi-DPI mobile), then scale the context so we keep drawing in logical px.
         const dpr = Math.min(window.devicePixelRatio || 1, 3);
         const c = this.canvas;
-        c.width = Math.round(width * dpr);
-        c.height = Math.round(height * dpr);
-        c.style.width = width + 'px';
-        c.style.height = height + 'px';
+        c.width = Math.round(cssW * dpr);
+        c.height = Math.round(cssH * dpr);
+        c.style.width = cssW + 'px';
+        c.style.height = cssH + 'px';
         c.style.position = 'absolute';
         c.style.left = '50%';
         c.style.top = '50%';
         c.style.transform = 'translate(-50%, -50%)';
-        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        this.ctx.setTransform(c.width / width, 0, 0, c.height / height, 0, 0);
 
         // Mobile perf: disable the costly shadowBlur glow on the HIGH-COUNT
         // entities (particles / bullets / enemies / homing) via CONFIG.lowFX
@@ -799,6 +814,7 @@ export class Game {
 
     startGame() {
         this.state = 'playing';
+        this.mode = 'solo';                 // co-op overrides this right after (startCoopGame)
         this._lastWasCoop = false;
         this.keys = {};
         this.score = 0;
@@ -2428,7 +2444,8 @@ closeStoryScreen() {
         if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
         if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
         if (wasHost) {
-            // Partner left — keep playing solo with the host ship.
+            // Partner left — keep playing solo with the host ship (stay in the
+            // arena to avoid a jarring mid-game resize; logic switches to solo).
             const local = this.roster.players[this.roster.localIndex];
             this.roster.players = [local];
             this.roster.localIndex = 0;
@@ -2437,21 +2454,46 @@ closeStoryScreen() {
         } else {
             // Host left — the guest cannot continue (host owned the simulation).
             this.mode = 'solo';
-            alert('Ο host αποσυνδέθηκε — τέλος co-op.');
-            this.showMenu();
+            this.showCoopMessage('Τέλος Co-op', 'Ο συμπαίκτης (host) αποσυνδέθηκε.');
         }
+    }
+
+    // Styled in-game overlay used in place of a native alert() for co-op endings.
+    showCoopMessage(title, text) {
+        const screen = document.getElementById('coop-msg-screen');
+        if (!screen) { this.showMenu(); return; }   // fail safe
+        const t = document.getElementById('coop-msg-title');
+        const m = document.getElementById('coop-msg-text');
+        if (t) t.textContent = title;
+        if (m) m.textContent = text;
+        // Freeze the frame underneath and hide the gameplay chrome.
+        this.state = 'menu';
+        ['hud', 'active-bonuses', 'touch-controls'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        });
+        screen.classList.remove('hidden');
+        const btn = document.getElementById('coop-msg-btn');
+        if (btn) btn.onclick = () => { screen.classList.add('hidden'); this.showMenu(); };
     }
 
     startCoopGame(role, difficulty) {
         GAME_SETTINGS.difficulty = difficulty;
         this.startGame();                       // full reset + 1 local ship + HUD + loop + state='playing'
         this.mode = role === 'host' ? 'coopHost' : 'coopGuest';
+        // Switch to the fixed shared arena (letterboxed) BEFORE placing ships, so
+        // both devices lay out and exchange positions in identical coordinates.
+        this.coopArenaActive = true;
+        this.setupCanvas();
+        this.initializeStars();                 // repopulate for the new arena size
         document.getElementById('coop-screen').classList.add('hidden');
-        // 2-ship roster: index 0 = host ship, index 1 = guest ship.
+        // 2-ship roster in ARENA coordinates: index 0 = host ship, index 1 = guest ship.
         const ship0 = this.roster.players[0];
         const ship1 = new Player(CONFIG.canvas.width / 2, CONFIG.canvas.height - 100);
         ship0.x = CONFIG.canvas.width * 0.40;
+        ship0.y = CONFIG.canvas.height - 100;
         ship1.x = CONFIG.canvas.width * 0.60;
+        ship1.y = CONFIG.canvas.height - 100;
         this.roster.players = [ship0, ship1];
         this.roster.localIndex = role === 'host' ? 0 : 1;
         // Distinct ship colors so players never confuse them. Per-screen: your
@@ -2468,6 +2510,12 @@ closeStoryScreen() {
         if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
         if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
         this.mode = 'solo';
+        // Drop the fixed arena and resize the canvas back to full-screen for solo.
+        if (this.coopArenaActive) {
+            this.coopArenaActive = false;
+            this.setupCanvas();
+            this.initializeStars();
+        }
     }
 
     _fireRemoteShip() {

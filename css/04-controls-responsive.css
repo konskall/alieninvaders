@@ -171,6 +171,7 @@
   
   #hud {
     padding: var(--space-12);
+    padding-top: max(var(--space-12), env(safe-area-inset-top));
     left: 0;
     transform: none;
     width: 100%;

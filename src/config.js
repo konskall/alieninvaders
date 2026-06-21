@@ -115,6 +115,13 @@ export const CONFIG = {
         width: 1200,
         height: 700
     },
+    // Fixed logical play-field for online co-op. Both devices simulate AND render
+    // in these coordinates, then letterbox-fit ("contain") it to their own screen,
+    // so a phone and a desktop see the exact same arena (no cropping / misalignment).
+    coopArena: {
+        width: 450,
+        height: 800
+    },
     player: {
         speed: 5,
         size: 20,

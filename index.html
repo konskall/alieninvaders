@@ -402,6 +402,21 @@
             </div>
         </div>
 
+        <!-- Co-op end / disconnect message (styled, replaces native alert) -->
+        <div id="coop-msg-screen" class="screen hidden">
+            <div class="screen-content console-panel">
+                <div class="coop-msg-icon">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14 0"/><path d="M1.5 9a16 16 0 0 1 21 0"/><path d="M8.5 16a6 6 0 0 1 7 0"/><line x1="3" y1="3" x2="21" y2="21"/></svg>
+                </div>
+                <h2 id="coop-msg-title">Τέλος Co-op</h2>
+                <p class="subtitle" id="coop-msg-text">Ο συμπαίκτης αποσυνδέθηκε.</p>
+                <button class="menu-launch" id="coop-msg-btn" type="button">
+                    <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4.5l8 7"/><path d="M6 10.5V19h12v-8.5"/><path d="M10 19v-4.5h4V19"/></svg></span>
+                    Κεντρικό Μενού
+                </button>
+            </div>
+        </div>
+
         <!-- Game Canvas -->
         <canvas id="game-canvas"></canvas>
 

@@ -19,7 +19,8 @@
 #settings-screen,
 #game-over-screen,
 #pause-screen,
-#coop-screen {
+#coop-screen,
+#coop-msg-screen {
   background: radial-gradient(120% 75% at 50% -5%, #11243a 0%, #081120 42%, #03060c 100%);
   backdrop-filter: none;
 }
@@ -30,6 +31,7 @@
 #game-over-screen::before,
 #pause-screen::before,
 #coop-screen::before,
+#coop-msg-screen::before,
 .share-dialog::before {
   content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .55;
   background-image:
@@ -45,6 +47,7 @@
 #game-over-screen::after,
 #pause-screen::after,
 #coop-screen::after,
+#coop-msg-screen::after,
 .share-dialog::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .06;
   background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(120,230,242,.4) 3px 4px);
@@ -240,3 +243,15 @@
   text-shadow: 0 0 22px rgba(50,184,198,.5); text-align: center; margin: 2px 0;
 }
 .coop-error { min-height: 16px; color: #ff6b6b; font: 600 12px/1.3 'Exo 2', sans-serif; text-align: center; }
+
+/* ── Co-op end / disconnect message ── */
+#coop-msg-screen .console-panel { align-items: center; text-align: center; gap: 16px; }
+#coop-msg-screen .subtitle { margin: 0; }
+.coop-msg-icon {
+  width: 78px; height: 78px; border-radius: 50%; margin: 4px 0 2px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--m-teal-bright);
+  background: radial-gradient(circle at 50% 40%, rgba(50,184,198,.20), rgba(50,184,198,.05) 68%, transparent);
+  border: 1px solid var(--m-line);
+  box-shadow: 0 0 28px rgba(50,184,198,.35), inset 0 0 18px rgba(50,184,198,.15);
+}
