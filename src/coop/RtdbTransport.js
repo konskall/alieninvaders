@@ -17,17 +17,28 @@ export class RtdbTransport extends BaseTransport {
   }
 
   async connect() {
+    if (this._subs.length) return;   // guard: no duplicate subscriptions on re-connect
     const base = `rooms/${this.code}/${this.inDir}`;
+
     const liveRef = this.db.ref(`${base}/live`);
     const liveCb = liveRef.on('value', (snap) => {
       const v = snap.val();
-      if (v) this._emitMessage(v);
+      if (v) this._emitMessage(v);   // null => node deleted/empty; skip
     });
+
+    // child_added replays ALL existing children on subscribe. Record the keys
+    // present at connect time and skip them, so stale ctrl messages (e.g. from a
+    // reused room) are not re-delivered; only genuinely new ones are emitted.
     const ctrlRef = this.db.ref(`${base}/ctrl`);
+    const seen = new Set();
+    const initial = await ctrlRef.once('value');
+    initial.forEach((child) => { seen.add(child.key); });
     const ctrlCb = ctrlRef.on('child_added', (snap) => {
+      if (seen.has(snap.key)) return;
       const v = snap.val();
       if (v) this._emitMessage(v);
     });
+
     this._subs.push([liveRef, 'value', liveCb], [ctrlRef, 'child_added', ctrlCb]);
   }
 
