@@ -2,7 +2,7 @@
 // and bootstraps a CoopSession over RtdbTransport. Browser-only (DOM + Firebase),
 // so it is verified by 2-tab / 2-device play, not node:test.
 import { generateRoomCode, isValidRoomCode } from './roomCode.js';
-import { RtdbTransport } from './RtdbTransport.js';
+import { connectCoop } from './connectCoop.js';
 import { CoopSession } from './CoopSession.js';
 
 const DIFFICULTIES = ['very_easy', 'easy', 'normal', 'hard', 'nightmare'];
@@ -151,8 +151,7 @@ export class CoopLobby {
       ? (this.el.difficulty.value || 'easy')
       : ((await this.roomRef.child('difficulty').once('value')).val() || 'easy');
 
-    const transport = new RtdbTransport(this.db, this.code, role);
-    await transport.connect();
+    const transport = await connectCoop(this.db, this.code, role);
     const world = this.game.makeCoopWorld(role);
     const session = new CoopSession(transport, role, world);
     const names = this.role === 'host'
