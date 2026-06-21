@@ -889,14 +889,12 @@ export class Game {
             comet: Date.now()
         };
         
-        // Reset super weapon
-        this.superWeapon = {
-            charge: 0,
-            ready: false,
-            active: false,
-            activationTime: 0
-        };
-        
+        // Reset super weapons. Each player has their OWN (not shared): superWeapon
+        // is the LOCAL player's gauge; superWeaponRemote is the partner's (the host
+        // tracks both, charges each from that ship's own hits). Unused in solo.
+        this.superWeapon = { charge: 0, ready: false, active: false, activationTime: 0 };
+        this.superWeaponRemote = { charge: 0, ready: false, active: false, activationTime: 0 };
+
         // Reset screen shake
         this.screenShake = { x: 0, y: 0, intensity: 0 };
 
@@ -1429,40 +1427,52 @@ escapeHtml(text) {
         }
     }
 
-    activateSuperWeapon() {
-        if (!this.superWeapon.ready || this.superWeapon.active) return;
-        // Co-op: the super weapon is a shared TEAM resource the host simulates.
-        // The guest can't fire it locally — it asks the host (via its input) and
-        // the host runs the real thing, which then syncs back to the guest.
+    // Map a player-bullet owner (roster index) to that player's super-weapon gauge.
+    // Missing owner or the local index -> local gauge (covers solo); on the host,
+    // 0 -> own gauge, 1 -> partner's.
+    _superForOwner(owner) {
+        return (owner == null || owner === this.roster.localIndex) ? this.superWeapon : this.superWeaponRemote;
+    }
+
+    // `sup` is the super-weapon state to fire (each player has their own in co-op),
+    // `originShip` is where the blast/FX originate. Defaults = the LOCAL player's.
+    activateSuperWeapon(sup = this.superWeapon, originShip = this.player) {
+        if (!sup || !sup.ready || sup.active) return;
+        // Co-op GUEST: per-player super is host-authoritative. The guest can't fire
+        // locally — it asks the host (via input.super); the host runs it for the
+        // guest's OWN super and syncs the result back to the guest's gauge.
         if (this.mode === 'coopGuest') { this._coopSuperReq = true; return; }
 
-        this.superWeapon.active = true;
-        this.superWeapon.activationTime = this.currentTime;
-        this.superWeapon.ready = false;
-        this.superWeapon.charge = 0;
-        
+        sup.active = true;
+        sup.activationTime = this.currentTime;
+        sup.ready = false;
+        sup.charge = 0;
+
         // Sound and vibration feedback
         this.soundManager.superWeapon();
         this.vibrationManager.superWeapon();
-        
+
         // Screen shake
         this.screenShake.intensity = CONFIG.superWeapon.shakeIntensity;
-        
+
+        const ox = originShip ? originShip.x : CONFIG.canvas.width / 2;
+        const oy = originShip ? originShip.y : CONFIG.canvas.height / 2;
+
         // Create massive shockwave
         this.shockwaves.push({
-            x: this.player.x,
-            y: this.player.y,
+            x: ox,
+            y: oy,
             radius: 0,
             maxRadius: Math.max(CONFIG.canvas.width, CONFIG.canvas.height) * 1.5,
             life: 1,
             speed: 15
         });
-        
+
         // Create flash effect
         for (let i = 0; i < 50; i++) {
             this.particles.push(new Particle(
-                this.player.x,
-                this.player.y,
+                ox,
+                oy,
                 i % 2 === 0 ? '#FFD700' : '#FFA500',
                 'glow'
             ));
@@ -1621,13 +1631,10 @@ escapeHtml(text) {
         if (shouldFire && this.mode !== 'coopGuest') {
             const bullets = this.player.shoot(this.currentTime, hasMultiShot);
             if (bullets) {
-                if (Array.isArray(bullets)) {
-                    this.bullets.push(...bullets);
-                    this.soundManager.playerShoot();
-                } else {
-                    this.bullets.push(bullets);
-                    this.soundManager.playerShoot();
-                }
+                const list = Array.isArray(bullets) ? bullets : [bullets];
+                for (const b of list) b.owner = this.roster.localIndex;   // tag for per-player super charge
+                this.bullets.push(...list);
+                this.soundManager.playerShoot();
             }
         } else if (shouldFire && this.mode === 'coopGuest' && this.player && this.player.health > 0) {
             // The host owns the real bullets, but the guest should still HEAR its
@@ -1643,9 +1650,10 @@ escapeHtml(text) {
         this.currentTime = Date.now();
 
         // Clock-driven super-weapon deactivation (survives pause/restart correctly)
-        if (this.superWeapon.active &&
-            this.currentTime - this.superWeapon.activationTime >= CONFIG.superWeapon.duration) {
-            this.superWeapon.active = false;
+        for (const sup of [this.superWeapon, this.superWeaponRemote]) {
+            if (sup && sup.active && this.currentTime - sup.activationTime >= CONFIG.superWeapon.duration) {
+                sup.active = false;
+            }
         }
 
         // Co-op guest does not simulate — it renders host snapshots (own ship moves in handleInput).
@@ -1868,11 +1876,10 @@ escapeHtml(text) {
                                 20
                             );
                         }
-                        this.superWeapon.charge = Math.min(this.superWeapon.charge + enemy.points, CONFIG.superWeapon.threshold);
-                        
-                        if (this.superWeapon.charge >= CONFIG.superWeapon.threshold) {
-                            this.superWeapon.ready = true;
-                        }
+                        // Charge the gauge of the player whose bullet got the kill.
+                        const sup = this._superForOwner(bullet.owner);
+                        sup.charge = Math.min(sup.charge + enemy.points, CONFIG.superWeapon.threshold);
+                        if (sup.charge >= CONFIG.superWeapon.threshold) sup.ready = true;
                         
                         // Spawn bonus with chance
                         this.spawnBonusPickup(enemyX, enemyY);
@@ -2005,9 +2012,9 @@ escapeHtml(text) {
                 if (!bullet.isPlayerBullet) continue;
                 if (this.boss.collidesWith(bullet.x, bullet.y, bullet.radius)) {
                     this.bullets.splice(i, 1);
-                    this.superWeapon.charge = Math.min(
-                        this.superWeapon.charge + 2, CONFIG.superWeapon.threshold
-                    );
+                    const sup = this._superForOwner(bullet.owner);
+                    sup.charge = Math.min(sup.charge + 2, CONFIG.superWeapon.threshold);
+                    if (sup.charge >= CONFIG.superWeapon.threshold) sup.ready = true;
                     if (this.boss.takeDamage()) {
                         const pts = this.boss.points;
                         const bossX = this.boss.x;
@@ -2598,7 +2605,11 @@ closeStoryScreen() {
         const ship = this.coopRemoteShip;
         if (!ship || ship.health <= 0) return;
         const bullets = ship.shoot(this.currentTime, !!this.activeBonuses.multiShot);
-        if (bullets) Array.isArray(bullets) ? this.bullets.push(...bullets) : this.bullets.push(bullets);
+        if (!bullets) return;
+        const list = Array.isArray(bullets) ? bullets : [bullets];
+        const owner = 1 - this.roster.localIndex;   // the partner's index; charges their gauge
+        for (const b of list) b.owner = owner;
+        this.bullets.push(...list);
     }
 
     // Apply one hit to a ship (shield/invincibility/damage); ends the game only
@@ -2655,7 +2666,9 @@ closeStoryScreen() {
         this._lastRecvAt = Date.now();
         const ship = this.coopRemoteShip;   // host: the guest ship
         if (ship && typeof msg.x === 'number') { ship.x = msg.x; ship.y = msg.y; }
-        if (msg.super) this.activateSuperWeapon();   // guest fired the team super weapon
+        // Guest fired ITS OWN super weapon -> run it on the guest's gauge, originating
+        // at the guest ship.
+        if (msg.super) this.activateSuperWeapon(this.superWeaponRemote, this.coopRemoteShip);
     }
 
     coopBuildSnapshot() {
@@ -2670,7 +2683,9 @@ closeStoryScreen() {
                    wave: this.waveState.number,
                    // Banner text only while it's actively showing on the host.
                    banner: (this.currentTime - (this.waveState.bannerStartTime || 0) < WAVE_CONFIG.ANNOUNCE_DURATION) ? this.waveState.bannerText : '',
-                   superCharge: this.superWeapon.charge, superReady: this.superWeapon.ready, superActive: this.superWeapon.active,
+                   // Send the PARTNER's gauge (superWeaponRemote = the guest's own) so the
+                   // guest sees and controls its own super, independent of the host's.
+                   superCharge: this.superWeaponRemote.charge, superReady: this.superWeaponRemote.ready, superActive: this.superWeaponRemote.active,
                    // Active team bonuses as { type: remainingMs } — inside hud because the
                    // wire protocol (buildState) only forwards the hud object, not extra keys.
                    bonuses: Object.fromEntries(Object.entries(this.activeBonuses).map(
