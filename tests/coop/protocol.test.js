@@ -46,3 +46,18 @@ test('isValidMessage rejects junk and accepts typed objects', () => {
   assert.equal(isValidMessage({ t: 123 }), false);
   assert.equal(isValidMessage({ t: 'state' }), true);
 });
+
+test('buildHello truncates name to 20 chars and sets type', () => {
+  const msg = buildHello('x'.repeat(30));
+  assert.equal(msg.t, 'hello');
+  assert.equal(msg.name.length, 20);
+});
+
+test('buildHello defaults missing name to empty string', () => {
+  assert.equal(buildHello(undefined).name, '');
+  assert.equal(buildHello(null).name, '');
+});
+
+test('buildStart stringifies difficulty into a start message', () => {
+  assert.deepEqual(buildStart('normal'), { t: 'start', difficulty: 'normal' });
+});
