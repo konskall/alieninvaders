@@ -164,20 +164,26 @@ export class CoopLobby {
     this._beginGame('host');
   }
 
+  _setConnecting(on) {
+    const el = document.getElementById('coop-connecting');
+    if (el) el.classList.toggle('hidden', !on);
+  }
+
   async _beginGame(role) {
     const myGen = this._gen;   // abort if the user leaves during the async connect
     // Stop listening to lobby presence; cancel the host room auto-remove so the
     // room survives into gameplay.
     this._detach();
     if (this.role === 'host') this.roomRef.onDisconnect().cancel();
+    this._setConnecting(true);   // visible feedback while the link establishes (can take a few s)
 
     const difficulty = this.role === 'host'
       ? (this.el.difficulty.value || 'easy')
       : ((await this.roomRef.child('difficulty').once('value')).val() || 'easy');
-    if (myGen !== this._gen) return;   // left during the difficulty fetch
+    if (myGen !== this._gen) { this._setConnecting(false); return; }   // left during the difficulty fetch
 
     const transport = await connectCoop(this.db, this.code, role);
-    if (myGen !== this._gen) { try { transport.close(); } catch (e) {} return; }   // left during connect
+    if (myGen !== this._gen) { this._setConnecting(false); try { transport.close(); } catch (e) {} return; }   // left during connect
 
     const world = this.game.makeCoopWorld(role);
     const session = new CoopSession(transport, role, world);
@@ -194,6 +200,7 @@ export class CoopLobby {
 
   leave() {
     this._gen++;   // abort any in-flight _beginGame connect
+    this._setConnecting(false);
     this._detach();
     if (this.roomRef) {
       if (this.role === 'host') this.roomRef.remove();

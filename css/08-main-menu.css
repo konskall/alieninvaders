@@ -257,6 +257,27 @@
   box-shadow: 0 0 28px rgba(50,184,198,.35), inset 0 0 18px rgba(50,184,198,.15);
 }
 
+/* ── Co-op connecting spinner ── */
+#coop-connecting {
+  position: fixed; inset: 0; z-index: 2050;   /* above the lobby, below disconnect/game-over */
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(120% 75% at 50% -5%, #11243a 0%, #081120 42%, #03060c 100%);
+}
+#coop-connecting.hidden { display: none; }
+#coop-connecting .coop-connecting-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  color: var(--m-ink); font-family: 'Exo 2', sans-serif; font-size: 16px; letter-spacing: .04em;
+}
+.coop-spinner {
+  width: 54px; height: 54px; border-radius: 50%;
+  border: 4px solid rgba(50,184,198,.22);
+  border-top-color: var(--m-teal-bright);
+  box-shadow: 0 0 20px rgba(50,184,198,.35);
+  animation: coop-spin .8s linear infinite;
+}
+@keyframes coop-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .coop-spinner { animation-duration: 2s; } }
+
 /* ── Rotate-to-portrait prompt (co-op) ── */
 #rotate-screen {
   position: fixed; inset: 0;

@@ -54,6 +54,10 @@ export class SoundManager {
 
             oscillator.start(this.audioContext.currentTime);
             oscillator.stop(this.audioContext.currentTime + duration);
+            // Release nodes once they finish so iOS Safari doesn't accumulate them
+            // over a long session (a steady stream of un-disconnected nodes janks
+            // the main thread / audio thread over time).
+            oscillator.onended = () => { try { oscillator.disconnect(); gainNode.disconnect(); } catch (_) {} };
         } catch (e) {
             console.warn('Audio playback error:', e);
         }
@@ -101,6 +105,9 @@ export class SoundManager {
 
                 source.start(now);
                 source.stop(now + duration);
+                // Disconnect when finished so nodes don't pile up on iOS over a long
+                // match (the guest fires continuously -> many short-lived nodes/sec).
+                source.onended = () => { try { source.disconnect(); gain.disconnect(); } catch (_) {} };
             });
         } catch (e) {
             console.warn('Layered audio error:', e);

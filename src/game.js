@@ -230,7 +230,7 @@ export class Game {
         this._lastWasCoop = false;
         this.state = 'menu';
         ['game-over-screen', 'pause-screen', 'settings-screen', 'story-screen',
-         'gallery-screen', 'coop-screen', 'coop-msg-screen', 'hud', 'active-bonuses', 'touch-controls', 'leaderboard-modal']
+         'gallery-screen', 'coop-screen', 'coop-msg-screen', 'coop-connecting', 'hud', 'active-bonuses', 'touch-controls', 'leaderboard-modal']
             .forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.classList.add('hidden');
@@ -311,7 +311,10 @@ export class Game {
 
         // Back the canvas with a device-pixel-scaled buffer (crisp on Retina /
         // hi-DPI mobile), then scale the context so we keep drawing in logical px.
-        const dpr = Math.min(window.devicePixelRatio || 1, 3);
+        // In co-op on a phone, cap DPR at 2: the shared arena re-renders every frame
+        // on the weaker device, and a 3x backing store is ~2.25x the fill cost — the
+        // main driver of the guest's progressive slow-down / thermal throttling.
+        const dpr = Math.min(window.devicePixelRatio || 1, (coop && isMobile) ? 2 : 3);
         const c = this.canvas;
         c.width = Math.round(cssW * dpr);
         c.height = Math.round(cssH * dpr);
@@ -2554,6 +2557,7 @@ closeStoryScreen() {
         this.setupCanvas();
         this.initializeStars();                 // repopulate for the new arena size
         document.getElementById('coop-screen').classList.add('hidden');
+        document.getElementById('coop-connecting').classList.add('hidden');   // link established
         // 2-ship roster in ARENA coordinates: index 0 = host ship, index 1 = guest ship.
         const ship0 = this.roster.players[0];
         const ship1 = new Player(CONFIG.canvas.width / 2, CONFIG.canvas.height - 100);
