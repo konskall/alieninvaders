@@ -251,6 +251,14 @@
                 </button>
 
                 <nav class="menu-list">
+                    <button class="menu-row" id="coop-btn" type="button">
+                        <span class="menu-row__slot"><span class="menu-row__badge">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="9" r="2.6"/><path d="M3.5 18.5c0-2.5 2-4.3 4.5-4.3s4.5 1.8 4.5 4.3"/><circle cx="16.5" cy="9" r="2.6"/><path d="M14 14.4c2.3.2 4 2 4 4.1"/></svg>
+                        </span></span>
+                        <span class="menu-row__label">2 Παίκτες<small>Online co-op</small></span>
+                        <span class="menu-row__chev"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span>
+                    </button>
+
                     <button class="menu-row" id="story-btn" type="button">
                         <span class="menu-row__slot"><span class="menu-row__badge">
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.6C10.2 5.4 7.8 4.9 5.5 5.2c-.9.1-1.5.9-1.5 1.8v9.3c0 1 .9 1.8 1.9 1.7 2-.2 4.2.3 6.1 1.5 1.9-1.2 4.1-1.7 6.1-1.5 1 .1 1.9-.7 1.9-1.7V7c0-.9-.6-1.7-1.5-1.8-2.3-.3-4.7.2-6.5 1.4z"/><path d="M12 6.6v11.4"/></svg>
@@ -351,6 +359,44 @@
                     <button class="menu-row" id="pause-menu-btn" type="button">
                         <span class="menu-row__slot"><span class="menu-row__badge"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4.5l8 7"/><path d="M6 10.5V19h12v-8.5"/><path d="M10 19v-4.5h4V19"/></svg></span></span>
                         <span class="menu-row__label">Κεντρικό Μενού</span>
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Co-op Lobby -->
+        <div id="coop-screen" class="screen hidden">
+            <div class="screen-content console-panel">
+                <h2>2 Παίκτες — Online</h2>
+                <p class="subtitle">Παίξτε μαζί ενάντια στους εξωγήινους</p>
+                <input id="coop-name" class="form-control coop-input" maxlength="20" placeholder="Το όνομά σου" autocomplete="off" />
+                <div id="coop-error" class="coop-error"></div>
+
+                <div id="coop-choice">
+                    <button class="menu-launch" id="coop-create-btn" type="button">Δημιουργία δωματίου</button>
+                    <div class="coop-join-row">
+                        <input id="coop-code-input" class="form-control coop-input" maxlength="4" placeholder="ΚΩΔΙΚΟΣ" autocomplete="off" autocapitalize="characters" />
+                        <button class="menu-launch coop-join" id="coop-join-btn" type="button">Σύνδεση</button>
+                    </div>
+                </div>
+
+                <div id="coop-waiting" class="hidden">
+                    <p class="subtitle">Κωδικός δωματίου</p>
+                    <div id="coop-code-display" class="coop-code">----</div>
+                    <select id="coop-difficulty" class="form-control coop-input hidden">
+                        <option value="very_easy">Πολύ Εύκολο</option>
+                        <option value="easy" selected>Εύκολο</option>
+                        <option value="normal">Κανονικό</option>
+                        <option value="hard">Δύσκολο</option>
+                    </select>
+                    <p id="coop-status" class="subtitle">Περιμένω συμπαίκτη…</p>
+                    <button class="menu-launch hidden" id="coop-start-btn" type="button">Έναρξη</button>
+                </div>
+
+                <nav class="menu-list">
+                    <button class="menu-row" id="coop-back-btn" type="button">
+                        <span class="menu-row__slot"><span class="menu-row__badge"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 6l-6 6 6 6"/></svg></span></span>
+                        <span class="menu-row__label">Πίσω</span>
                     </button>
                 </nav>
             </div>

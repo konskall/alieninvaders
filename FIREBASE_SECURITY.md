@@ -15,6 +15,8 @@ must be applied in the Firebase project — they are NOT deployed by GitHub Page
 - **Validate:** each entry must have `name` (string, 1–20 chars), `score`
   (number, 0–100,000,000), `level` (number); optional `date`/`timestamp`/`id`
   are type/length-checked, and **any other field is rejected** (`$other` → false).
+- `rooms/<code>` — readable/writable by participants who know the 4-char code
+  (ephemeral co-op session state); the rest of the database stays closed.
 
 ## How to apply them (one-time, ~1 min)
 

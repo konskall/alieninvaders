@@ -15,6 +15,27 @@
         "id":        { ".validate": "newData.isString() && newData.val().length <= 64" },
         "$other":    { ".validate": false }
       }
+    },
+    "leaderboardCoop": {
+      ".read": true,
+      "$entry": {
+        ".write": "!data.exists()",
+        ".validate": "newData.hasChildren(['names','score','level'])",
+        "names":     { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 41" },
+        "score":     { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000000" },
+        "level":     { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000" },
+        "date":      { ".validate": "newData.isString() && newData.val().length <= 24" },
+        "timestamp": { ".validate": "newData.isNumber()" },
+        "id":        { ".validate": "newData.isString() && newData.val().length <= 64" },
+        "$other":    { ".validate": false }
+      }
+    },
+    "rooms": {
+      "$code": {
+        ".read": true,
+        ".write": true,
+        ".validate": "$code.length == 4"
+      }
     }
   }
 }

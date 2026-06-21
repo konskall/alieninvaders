@@ -14,6 +14,7 @@ export class LeaderboardManager {
         };
 
         this.scores = [];
+        this.coopScores = [];
         this.initialized = false;
         this.initFirebase();
     }
@@ -32,6 +33,46 @@ export class LeaderboardManager {
 
         this.db = firebase.database();
         this.loadScoresFromCloud();
+        this.loadCoopScoresFromCloud();
+    }
+
+    loadCoopScoresFromCloud() {
+        this.db.ref('leaderboardCoop').on('value', (snapshot) => {
+            const data = snapshot.val();
+            this.coopScores = data ? this._sanitizeCoop(Object.values(data)) : [];
+        }, () => { /* keep whatever we have on read error */ });
+    }
+
+    _sanitizeCoop(list) {
+        return list
+            .filter(e => e && typeof e.names !== 'undefined' && Number.isFinite(Number(e.score)))
+            .map(e => ({ ...e, score: Number(e.score) }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 50);
+    }
+
+    addCoopScore(names, score, level) {
+        const entry = {
+            names: (names || '').toString().slice(0, 41) || 'Co-op',
+            score: Math.floor(Number(score) || 0),
+            level: Number(level) || 1,
+            date: new Date().toLocaleDateString('el-GR'),
+            timestamp: Date.now(),
+            id: Date.now().toString()
+        };
+        if (this.initialized && this.db) {
+            const ref = this.db.ref('leaderboardCoop').push();
+            entry.id = ref.key;
+            this.coopScores = this._sanitizeCoop([...this.coopScores, entry]);
+            ref.set(entry).catch(e => console.warn('Co-op score save failed:', e));
+        } else {
+            this.coopScores = this._sanitizeCoop([...this.coopScores, entry]);
+        }
+        return entry;
+    }
+
+    getCoopScores() {
+        return this.coopScores;
     }
 
     loadScoresFromCloud() {

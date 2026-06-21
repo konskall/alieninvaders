@@ -15,6 +15,7 @@ import { SoundManager } from './managers/SoundManager.js';
 import { VibrationManager } from './managers/VibrationManager.js';
 import { MusicManager } from './managers/MusicManager.js';
 import { GALLERY_ITEMS, GalleryManager } from './gallery.js';
+import { CoopRoster } from './coop/CoopRoster.js';
 // Main Game Class
 export class Game {
     constructor() {
@@ -103,7 +104,8 @@ export class Game {
         this.state = 'credits';
         this.settingsOpener = 'menu';
         this.score = 0;
-        this.player = null;
+        this.roster = new CoopRoster();
+        this.mode = 'solo';   // 'solo' | 'coopHost' | 'coopGuest' (set by later phases)
         this.enemies = [];
         this.bullets = [];
         this.particles = [];
@@ -120,7 +122,13 @@ export class Game {
         this.loadSettings();
         this.gameLoop();
     }
-    
+
+    // Local player accessor — all existing `this.player.*` reads resolve here.
+    // `this.player` is intentionally read-only now; assign via `this.roster`.
+    get player() {
+        return this.roster.local;
+    }
+
     loadSettings() {
         // Calculate automatic sensitivity based on screen size
         this.calculateAutoSensitivity();
@@ -217,6 +225,8 @@ export class Game {
     }
 
     showMenu() {
+        this.stopCoop();
+        this._lastWasCoop = false;
         this.state = 'menu';
         ['game-over-screen', 'pause-screen', 'settings-screen', 'story-screen',
          'gallery-screen', 'hud', 'active-bonuses', 'touch-controls', 'leaderboard-modal']
@@ -484,6 +494,8 @@ export class Game {
         document.getElementById('menu-settings-btn').addEventListener('click', () => {
             this.openSettings('menu');
         });
+        const coopBtn = document.getElementById('coop-btn');
+        if (coopBtn) coopBtn.addEventListener('click', () => { if (this.coopLobby) this.coopLobby.show(); });
         // Tap the menu logo to replay the cinematic intro
         const menuBrand = document.getElementById('menu-brand-btn');
         if (menuBrand) {
@@ -787,6 +799,7 @@ export class Game {
 
     startGame() {
         this.state = 'playing';
+        this._lastWasCoop = false;
         this.keys = {};
         this.score = 0;
         this.enemies = [];
@@ -846,11 +859,12 @@ export class Game {
         
         // Reset screen shake
         this.screenShake = { x: 0, y: 0, intensity: 0 };
-        
-        this.player = new Player(
+
+        this.roster.reset();
+        this.roster.setLocal(new Player(
             CONFIG.canvas.width / 2,
             CONFIG.canvas.height - 100
-        );
+        ));
 
         document.getElementById('start-screen').classList.add('hidden');
         document.getElementById('game-over-screen').classList.add('hidden');
@@ -894,6 +908,7 @@ export class Game {
 		 const modal = document.getElementById('leaderboard-modal');
     modal.classList.add('hidden');
         // Restart game with current settings
+        this.stopCoop();
         this.startGame();
     }
     
@@ -1021,6 +1036,8 @@ export class Game {
     }
 
     gameOver() {
+    // Co-op: a single ship dying does not end the game while a partner survives.
+    if (this.mode !== 'solo' && !this.roster.isGameOver()) { this.updateHUD(); return; }
     this.state = 'gameOver';
     if (this.boss) {
         this.boss = null;
@@ -1030,7 +1047,14 @@ export class Game {
     this.soundManager.gameOver();
     this.musicManager.stop();
     document.getElementById('final-score').textContent = this.score;
-    this.setupGameOverScoreEntry();
+    if (this.mode === 'solo') {
+        this.setupGameOverScoreEntry();
+    } else {
+        this._lastWasCoop = true;
+        if (this.mode === 'coopHost') {
+            this.leaderboardManager.addCoopScore(this.coopNames || 'Co-op', this.score, this.progressiveDifficulty.currentLevel);
+        }
+    }
     document.getElementById('game-over-screen').classList.remove('hidden');
     document.getElementById('hud').classList.add('hidden');
     document.getElementById('active-bonuses').classList.add('hidden');
@@ -1095,12 +1119,14 @@ export class Game {
             livesContainer.appendChild(life);
         }
     }
-showLeaderboardModal() {
+showLeaderboardModal(coop = this._lastWasCoop) {
     const modal = document.getElementById('leaderboard-modal');
+    const title = modal.querySelector('.modal-header h2');
+    if (title) title.textContent = coop ? 'Co-op Κατάταξη' : 'Λίστα Κορυφαίων Παικτών';
 
     // View-only — name entry now lives in the Game Over screen
     modal.classList.remove('hidden');
-    this.updateLeaderboardDisplay();
+    this.updateLeaderboardDisplay(coop);
 
     // Κλείσιμο modal
     const closeBtn = modal.querySelector('.modal-close');
@@ -1115,9 +1141,9 @@ showLeaderboardModal() {
     modal.addEventListener('click', closeOnBackdrop);
 }
 
-updateLeaderboardDisplay() {
+updateLeaderboardDisplay(coop = false) {
     const leaderboardList = document.getElementById('leaderboard-list');
-    const scores = this.leaderboardManager.getScores();
+    const scores = coop ? this.leaderboardManager.getCoopScores() : this.leaderboardManager.getScores();
     
     leaderboardList.innerHTML = '';
     
@@ -1140,7 +1166,7 @@ updateLeaderboardDisplay() {
         entryEl.innerHTML = `
             <div class="leaderboard-rank ${rankClass}">${medal || rank}</div>
             <div class="leaderboard-info">
-                <div class="leaderboard-name">${this.escapeHtml(entry.name)}</div>
+                <div class="leaderboard-name">${this.escapeHtml(coop ? entry.names : entry.name)}</div>
                 <div class="leaderboard-meta">
                     <span>📊 Level ${this.escapeHtml(String(entry.level ?? ''))}</span>
                     <span>${this.escapeHtml(String(entry.date ?? ''))}</span>
@@ -1498,6 +1524,7 @@ escapeHtml(text) {
 
     handleInput() {
         if (!this.player || this.state !== 'playing') return;
+        if (this.player.health <= 0) return;   // dead ship = spectating (co-op)
 
         let dx = 0;
         let dy = 0;
@@ -1537,7 +1564,7 @@ escapeHtml(text) {
             shouldFire = this.keys['fire'];
         }
         
-        if (shouldFire) {
+        if (shouldFire && this.mode !== 'coopGuest') {
             const bullets = this.player.shoot(this.currentTime, hasMultiShot);
             if (bullets) {
                 if (Array.isArray(bullets)) {
@@ -1561,6 +1588,11 @@ escapeHtml(text) {
             this.currentTime - this.superWeapon.activationTime >= CONFIG.superWeapon.duration) {
             this.superWeapon.active = false;
         }
+
+        // Co-op guest does not simulate — it renders host snapshots (own ship moves in handleInput).
+        if (this.mode === 'coopGuest') return;
+        // Co-op host: the remote (guest) ship auto-fires too.
+        if (this.mode === 'coopHost') this._fireRemoteShip();
 
         // Spawn dynamic background elements
         this.updateBackgroundElements();
@@ -1998,6 +2030,9 @@ escapeHtml(text) {
                 }
             }
         }
+
+        // Co-op: damage the remote (guest) ship too (host-authoritative; additive).
+        if (this.mode === 'coopHost') this._damageRemoteShip();
     }
 
     buildNebulaGradients() {
@@ -2095,23 +2130,26 @@ escapeHtml(text) {
         this.bonusPickups.forEach(bonus => bonus.draw(this.ctx));
         
         // Draw player
-        if (this.player && this.state === 'playing') {
-            // Draw shield if active
-            if (this.activeBonuses.shield) {
-                this.ctx.save();
-                const shieldPulse = 0.7 + Math.sin(Date.now() * 0.005) * 0.3;
-                this.ctx.globalAlpha = shieldPulse;
-                this.ctx.strokeStyle = '#00CCFF';
-                this.ctx.lineWidth = 3;
-                this.ctx.shadowBlur = 20;
-                this.ctx.shadowColor = '#00CCFF';
-                this.ctx.beginPath();
-                this.ctx.arc(this.player.x, this.player.y, this.player.size * 2, 0, Math.PI * 2);
-                this.ctx.stroke();
-                this.ctx.restore();
+        if (this.state === 'playing') {
+            // Draw every ship in the roster (1 in solo, 2 in co-op).
+            for (const ship of this.roster.players) {
+                if (!ship || ship.health <= 0) continue;
+                // Shield ring only for the local player's active shield bonus.
+                if (ship === this.player && this.activeBonuses.shield) {
+                    this.ctx.save();
+                    const shieldPulse = 0.7 + Math.sin(Date.now() * 0.005) * 0.3;
+                    this.ctx.globalAlpha = shieldPulse;
+                    this.ctx.strokeStyle = '#00CCFF';
+                    this.ctx.lineWidth = 3;
+                    this.ctx.shadowBlur = 20;
+                    this.ctx.shadowColor = '#00CCFF';
+                    this.ctx.beginPath();
+                    this.ctx.arc(ship.x, ship.y, ship.size * 2, 0, Math.PI * 2);
+                    this.ctx.stroke();
+                    this.ctx.restore();
+                }
+                ship.draw(this.ctx);
             }
-            
-            this.player.draw(this.ctx);
         }
 
         // Combo display
@@ -2355,6 +2393,173 @@ closeStoryScreen() {
     document.getElementById('start-screen').classList.remove('hidden');
     this.state = 'menu';
 }
+    // ===== Online co-op — game-state sync (host-authoritative) =====
+    // The Game IS the world adapter; the netcode calls the role-appropriate methods.
+    makeCoopWorld(role) {
+        return {
+            getSnapshot: () => this.coopBuildSnapshot(),
+            applySnapshot: (m) => this.coopApplySnapshot(m),
+            getLocalInput: () => this.coopGetLocalInput(),
+            applyRemoteInput: (m) => this.coopApplyRemoteInput(m),
+        };
+    }
+
+    beginCoop(session, role, difficulty, code, names) {
+        this.coopSession = session;
+        this.coopRole = role;
+        this.coopCode = code;
+        this.coopDifficulty = difficulty;
+        this.coopNames = names || 'Co-op';
+        this.startCoopGame(role, difficulty);
+        this._lastRecvAt = Date.now();
+        this._coopEnded = false;
+        if (this._coopTimer) clearInterval(this._coopTimer);
+        this._coopTimer = setInterval(() => {
+            try { session.tick(); } catch (e) { /* transport closed */ }
+            // Watchdog: no message from the peer for 4s => treat as disconnected.
+            if (this.state === 'playing' && Date.now() - this._lastRecvAt > 4000) this._coopDisconnected();
+        }, 66);
+    }
+
+    _coopDisconnected() {
+        if (this._coopEnded) return;
+        this._coopEnded = true;
+        const wasHost = this.mode === 'coopHost';
+        if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
+        if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
+        if (wasHost) {
+            // Partner left — keep playing solo with the host ship.
+            const local = this.roster.players[this.roster.localIndex];
+            this.roster.players = [local];
+            this.roster.localIndex = 0;
+            this.mode = 'solo';
+            this.spawnFloatingText(CONFIG.canvas.width / 2, CONFIG.canvas.height / 2, 'Ο συμπαίκτης αποσυνδέθηκε', '#FF6347', 22);
+        } else {
+            // Host left — the guest cannot continue (host owned the simulation).
+            this.mode = 'solo';
+            alert('Ο host αποσυνδέθηκε — τέλος co-op.');
+            this.showMenu();
+        }
+    }
+
+    startCoopGame(role, difficulty) {
+        GAME_SETTINGS.difficulty = difficulty;
+        this.startGame();                       // full reset + 1 local ship + HUD + loop + state='playing'
+        this.mode = role === 'host' ? 'coopHost' : 'coopGuest';
+        document.getElementById('coop-screen').classList.add('hidden');
+        // 2-ship roster: index 0 = host ship, index 1 = guest ship.
+        const ship0 = this.roster.players[0];
+        const ship1 = new Player(CONFIG.canvas.width / 2, CONFIG.canvas.height - 100);
+        ship0.x = CONFIG.canvas.width * 0.40;
+        ship1.x = CONFIG.canvas.width * 0.60;
+        this.roster.players = [ship0, ship1];
+        this.roster.localIndex = role === 'host' ? 0 : 1;
+    }
+
+    get coopRemoteShip() {
+        return this.roster.players[1 - this.roster.localIndex] || null;
+    }
+
+    stopCoop() {
+        if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
+        if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
+        this.mode = 'solo';
+    }
+
+    _fireRemoteShip() {
+        const ship = this.coopRemoteShip;
+        if (!ship || ship.health <= 0) return;
+        const bullets = ship.shoot(this.currentTime, false);
+        if (bullets) Array.isArray(bullets) ? this.bullets.push(...bullets) : this.bullets.push(bullets);
+    }
+
+    // Apply one hit to a ship (shield/invincibility/damage); ends the game only
+    // when ALL ships are dead. Shared by the co-op remote-ship damage path.
+    _hitShip(ship) {
+        this.screenShake.intensity = Math.max(this.screenShake.intensity, 0.25);
+        this.combo = 0;
+        if (this.activeBonuses.shield) {
+            delete this.activeBonuses.shield;
+            this.updateActiveBonusesUI();
+            for (let k = 0; k < 20; k++) this.particles.push(new Particle(ship.x, ship.y, '#00CCFF', 'glow'));
+            return;
+        }
+        this.soundManager.damageTaken();
+        if (GAME_SETTINGS.vibrationEnabled) this.vibrationManager.damage();
+        for (let k = 0; k < 10; k++) this.particles.push(new Particle(ship.x, ship.y, '#FFD700'));
+        ship.makeInvincible();
+        if (ship.takeDamage()) {
+            this.createExplosion(ship.x, ship.y, ship.size * 1.5, '#FF6347');   // ship destroyed -> spectates
+        }
+        this.updateHUD();
+        if (this.roster.isGameOver()) this.gameOver();
+    }
+
+    // Host-authoritative damage for the remote (guest) ship. Additive: the
+    // existing collision blocks already damage the local (host) ship.
+    _damageRemoteShip() {
+        const gs = this.coopRemoteShip;
+        if (!gs || gs.health <= 0 || gs.invincible) return;
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const b = this.bullets[i];
+            if (b.isPlayerBullet) continue;
+            if (distance(b.x, b.y, gs.x, gs.y) < b.radius + gs.size) { this.bullets.splice(i, 1); return this._hitShip(gs); }
+        }
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            const e = this.enemies[i];
+            if (distance(gs.x, gs.y, e.x, e.y) < gs.size + e.size) { this.enemies.splice(i, 1); this.createExplosion(e.x, e.y, e.size, '#FF6347'); return this._hitShip(gs); }
+        }
+        for (let i = this.homingBullets.length - 1; i >= 0; i--) {
+            const h = this.homingBullets[i];
+            if (distance(h.x, h.y, gs.x, gs.y) < h.radius + gs.size) { this.homingBullets.splice(i, 1); return this._hitShip(gs); }
+        }
+        if (this.boss && this.boss.collidesWith(gs.x, gs.y, gs.size)) { return this._hitShip(gs); }
+    }
+
+    coopGetLocalInput() {
+        const s = this.player;
+        return { x: s ? s.x : 0, y: s ? s.y : 0, firing: true, alive: !!(s && s.health > 0) };
+    }
+
+    coopApplyRemoteInput(msg) {
+        this._lastRecvAt = Date.now();
+        const ship = this.coopRemoteShip;   // host: the guest ship
+        if (ship && typeof msg.x === 'number') { ship.x = msg.x; ship.y = msg.y; }
+    }
+
+    coopBuildSnapshot() {
+        return {
+            ships: this.roster.players.map((s, i) => ({ i, x: s.x, y: s.y, health: s.health, alive: s.health > 0 })),
+            enemies: this.enemies.map(e => ({ type: e.typeName, x: e.x, y: e.y, hp: e.health })),
+            bullets: this.bullets.map(b => ({ x: b.x, y: b.y, color: b.color, p: !!b.isPlayerBullet, et: b.enemyType })),
+            homing: this.homingBullets.map(h => ({ x: h.x, y: h.y })),
+            boss: this.boss ? { x: this.boss.x, y: this.boss.y, hp: this.boss.health, maxHp: this.boss.maxHealth, size: this.boss.size } : null,
+            pickups: this.bonusPickups.map(p => ({ x: p.x, y: p.y, type: p.type })),
+            hud: { score: this.score, level: this.progressiveDifficulty.currentLevel, combo: this.combo, kills: this.killCount, over: this.state === 'gameOver' },
+            events: [],
+        };
+    }
+
+    coopApplySnapshot(msg) {
+        if (!msg) return;
+        this._lastRecvAt = Date.now();
+        this.enemies = (msg.enemies || []).map(e => { const en = new Enemy(e.x, e.y, e.type); en.health = e.hp; en.x = e.x; en.y = e.y; return en; });
+        this.bullets = (msg.bullets || []).map(b => { const bu = new Bullet(b.x, b.y, 0, 0, b.color, b.p, b.et); bu.x = b.x; bu.y = b.y; return bu; });
+        this.homingBullets = (msg.homing || []).map(h => { const hb = new HomingBullet(h.x, h.y, h.x, h.y); hb.x = h.x; hb.y = h.y; return hb; });
+        if (msg.boss) { const bo = new Boss(CONFIG.canvas.width, CONFIG.canvas.height, 10); bo.x = msg.boss.x; bo.y = msg.boss.y; bo.health = msg.boss.hp; bo.maxHealth = msg.boss.maxHp; bo.size = msg.boss.size; bo.entranceComplete = true; this.boss = bo; } else { this.boss = null; }
+        this.bonusPickups = (msg.pickups || []).map(p => new BonusPickup(p.x, p.y, p.type));
+        const localIdx = this.roster.localIndex;
+        (msg.ships || []).forEach(s => {
+            const ship = this.roster.players[s.i];
+            if (!ship) return;
+            ship.health = s.health;
+            if (s.i !== localIdx) { ship.x = s.x; ship.y = s.y; }   // remote ship pos from host; own ship stays local
+        });
+        if (msg.hud) { this.score = msg.hud.score; this.displayScore = msg.hud.score; this.combo = msg.hud.combo || 0; this.killCount = msg.hud.kills || 0; }
+        this.updateHUD();
+        if (msg.hud && msg.hud.over && this.state === 'playing') this.gameOver();
+    }
+
     gameLoop() {
         this.handleInput();
         this.updateGame();
