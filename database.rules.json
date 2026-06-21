@@ -15,6 +15,13 @@
         "id":        { ".validate": "newData.isString() && newData.val().length <= 64" },
         "$other":    { ".validate": false }
       }
+    },
+    "rooms": {
+      "$code": {
+        ".read": true,
+        ".write": true,
+        ".validate": "$code.length == 4"
+      }
     }
   }
 }
