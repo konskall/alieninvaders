@@ -490,10 +490,14 @@ export class Game {
             this.showShareDialog();
         });
 
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            this.setupCanvas();
-        });
+        // Handle window resize. iOS Safari's toolbar collapse and orientation
+        // changes don't always emit a reliable 'resize', so also listen to the
+        // visual viewport and orientationchange to re-fit the (letterboxed) canvas.
+        window.addEventListener('resize', () => this.setupCanvas());
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => this.setupCanvas());
+        }
+        window.addEventListener('orientationchange', () => setTimeout(() => this.setupCanvas(), 100));
         
         // Prevent default touch behaviors ONLY during gameplay, so menus, the
         // leaderboard, gallery and story screens can still scroll on touch devices.
@@ -819,6 +823,8 @@ export class Game {
         this.state = 'playing';
         this.mode = 'solo';                 // co-op overrides this right after (startCoopGame)
         this._lastWasCoop = false;
+        this._hudLives = -1;                // force the lives HUD to rebuild on first updateHUD
+        this._coopBossSig = undefined; this._coopBonusSig = undefined;
         this.keys = {};
         this.score = 0;
         this.enemies = [];
@@ -1055,9 +1061,12 @@ export class Game {
     }
 
     gameOver() {
+    if (this.state === 'gameOver') return;   // already ended — never submit the score twice
     // Co-op: a single ship dying does not end the game while a partner survives.
     if (this.mode !== 'solo' && !this.roster.isGameOver()) { this.updateHUD(); return; }
     this.state = 'gameOver';
+    // Co-op ended cleanly — stop the watchdog from popping the "disconnected" overlay.
+    if (this.mode !== 'solo') this._coopEnded = true;
     if (this.boss) {
         this.boss = null;
         this.homingBullets = [];
@@ -1129,13 +1138,19 @@ export class Game {
             scoreElement.style.textShadow = '';
         }
         
+        // Rebuild hearts only when the count changes — coopApplySnapshot calls
+        // updateHUD ~30x/sec on the guest, and innerHTML thrash there causes jank.
         const livesContainer = document.getElementById('lives-container');
-        livesContainer.innerHTML = '';
-        for (let i = 0; i < this.player.health; i++) {
-            const life = document.createElement('span');
-            life.className = 'life';
-            life.textContent = '❤️';
-            livesContainer.appendChild(life);
+        const hp = this.player ? this.player.health : 0;
+        if (this._hudLives !== hp) {
+            this._hudLives = hp;
+            livesContainer.innerHTML = '';
+            for (let i = 0; i < hp; i++) {
+                const life = document.createElement('span');
+                life.className = 'life';
+                life.textContent = '❤️';
+                livesContainer.appendChild(life);
+            }
         }
     }
 showLeaderboardModal(coop = this._lastWasCoop) {
@@ -1636,9 +1651,12 @@ escapeHtml(text) {
         // Wave-based enemy spawning
         this.updateWaveSystem();
 
-        // Update player
-        if (this.player) {
-            this.player.update();
+        // Update ALL roster ships, not just the local one. In co-op the remote
+        // (guest) ship's invincibility timer and engine pulse live on its Player
+        // object; if we only update this.player the guest ship stays invincible
+        // forever after its first hit (timer never decrements).
+        for (const ship of this.roster.players) {
+            if (ship) ship.update();
         }
 
         // Update stars
@@ -2455,6 +2473,11 @@ closeStoryScreen() {
         this.startCoopGame(role, difficulty);
         this._lastRecvAt = Date.now();
         this._coopEnded = false;
+        // Instant disconnect detection: the transport tells us when the peer's
+        // channel closes (tab closed / dropped), so we don't wait the 4s watchdog.
+        if (session.transport && session.transport.onClose) {
+            session.transport.onClose(() => this._coopDisconnected());
+        }
         if (this._coopTimer) clearInterval(this._coopTimer);
         this._coopTimer = setInterval(() => {
             try { session.tick(); } catch (e) { /* transport closed */ }
@@ -2614,10 +2637,15 @@ closeStoryScreen() {
             enemies: this.enemies.map(e => ({ type: e.typeName, x: e.x, y: e.y, hp: e.health })),
             bullets: this.bullets.map(b => ({ x: b.x, y: b.y, color: b.color, p: !!b.isPlayerBullet, et: b.enemyType })),
             homing: this.homingBullets.map(h => ({ x: h.x, y: h.y })),
-            boss: this.boss ? { x: this.boss.x, y: this.boss.y, hp: this.boss.health, maxHp: this.boss.maxHealth, size: this.boss.size } : null,
+            boss: this.boss ? { x: this.boss.x, y: this.boss.y, hp: this.boss.health, maxHp: this.boss.maxHealth, size: this.boss.size, name: this.boss.name, phase: this.boss.phase } : null,
             pickups: this.bonusPickups.map(p => ({ x: p.x, y: p.y, type: p.type })),
             hud: { score: this.score, level: this.progressiveDifficulty.currentLevel, combo: this.combo, kills: this.killCount, over: this.state === 'gameOver',
-                   superCharge: this.superWeapon.charge, superReady: this.superWeapon.ready, superActive: this.superWeapon.active },
+                   wave: this.waveState.number,
+                   superCharge: this.superWeapon.charge, superReady: this.superWeapon.ready, superActive: this.superWeapon.active,
+                   // Active team bonuses as { type: remainingMs } — inside hud because the
+                   // wire protocol (buildState) only forwards the hud object, not extra keys.
+                   bonuses: Object.fromEntries(Object.entries(this.activeBonuses).map(
+                       ([k, v]) => [k, Math.max(0, (v.duration || 0) - (Date.now() - (v.startTime || Date.now())))])) },
             events: [],
         };
     }
@@ -2656,7 +2684,13 @@ closeStoryScreen() {
         if (msg.boss) {
             if (!this.boss) { this.boss = new Boss(CONFIG.canvas.width, CONFIG.canvas.height, 10); this.boss.entranceComplete = true; }
             const bo = this.boss; bo.x = msg.boss.x; bo.y = msg.boss.y; bo.health = msg.boss.hp; bo.maxHealth = msg.boss.maxHp; bo.size = msg.boss.size;
+            if (msg.boss.name) bo.name = msg.boss.name;
+            if (typeof msg.boss.phase === 'number') bo.phase = msg.boss.phase;
         } else { this.boss = null; }
+        // Boss HP bar: only touch the DOM when its state actually changes.
+        const bossSig = this.boss ? `${this.boss.name}|${Math.round(this.boss.health)}|${this.boss.maxHealth}|${this.boss.phase}` : '';
+        if (bossSig !== this._coopBossSig) { this._coopBossSig = bossSig; this.updateBossHUD(); }
+
         const localIdx = this.roster.localIndex;
         (msg.ships || []).forEach(s => {
             const ship = this.roster.players[s.i];
@@ -2664,6 +2698,16 @@ closeStoryScreen() {
             ship.health = s.health;
             if (s.i !== localIdx) { ship.x = s.x; ship.y = s.y; }   // remote ship pos from host; own ship stays local
         });
+
+        // Mirror team bonuses (shield/rapidFire/multiShot/multiplier) so the guest
+        // renders the shield ring, the 2x-score highlight and the active-bonus icons.
+        this.activeBonuses = {};
+        const nowB = Date.now();
+        const bonusMap = (msg.hud && msg.hud.bonuses) || {};
+        for (const [k, rem] of Object.entries(bonusMap)) this.activeBonuses[k] = { startTime: nowB, duration: rem };
+        const bonusSig = Object.keys(this.activeBonuses).sort().join(',');
+        if (bonusSig !== this._coopBonusSig) { this._coopBonusSig = bonusSig; this.updateActiveBonusesUI(); }
+
         if (msg.hud) {
             this.score = msg.hud.score; this.displayScore = msg.hud.score; this.combo = msg.hud.combo || 0; this.killCount = msg.hud.kills || 0;
             // Mirror the team super-weapon so the guest's gauge/button is correct
@@ -2672,6 +2716,21 @@ closeStoryScreen() {
             this.superWeapon.ready = !!msg.hud.superReady;
             this.superWeapon.active = !!msg.hud.superActive;
             this.updateSuperWeaponUI();
+            // Wave number (guest never runs the wave system).
+            if (typeof msg.hud.wave === 'number') {
+                this.waveState.number = msg.hud.wave;
+                const wEl = document.getElementById('wave-number');
+                if (wEl) wEl.textContent = msg.hud.wave;
+            }
+            // Difficulty/level comes from the host (guest's local level logic is off).
+            const lvl = msg.hud.level || 1;
+            const ms = PROGRESSIVE_DIFFICULTY.milestones[Math.min(lvl - 1, PROGRESSIVE_DIFFICULTY.milestones.length - 1)];
+            if (ms && this.progressiveDifficulty.currentLevel !== ms.level) {
+                this.progressiveDifficulty.currentLevel = ms.level;
+                this.progressiveDifficulty.currentScaling = ms.scaling;
+                this.progressiveDifficulty.currentMilestone = ms;
+                this.updateDifficultyHUD();
+            }
         }
         this.updateHUD();
         if (msg.hud && msg.hud.over && this.state === 'playing') this.gameOver();
