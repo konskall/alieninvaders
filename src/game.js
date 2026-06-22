@@ -1437,10 +1437,12 @@ escapeHtml(text) {
     startNextWave() {
         this.waveState.number++;
 
-        // Boss cadence scales with difficulty: very_easy ~ rare, hard ~ frequent
-        // (normal stays every 10th wave). Boss HP still scales with depth (wave/10).
+        // Boss cadence scales with difficulty: harder = more frequent (normal stays
+        // every 10th wave). Clamp to [6,12] so bosses ALWAYS appear within a reachable
+        // number of waves — the raw 10/freq put easy at 33 and very_easy at 67 waves,
+        // i.e. effectively never. Boss HP still scales with depth (wave/10).
         const diffB = DIFFICULTY_CONFIG[GAME_SETTINGS.difficulty] || DIFFICULTY_CONFIG.normal;
-        const bossInterval = Math.max(3, Math.round(10 / (diffB.bossSpawnFrequency || 1)));
+        const bossInterval = Math.min(12, Math.max(6, Math.round(10 / (diffB.bossSpawnFrequency || 1))));
         if (this.waveState.number % bossInterval === 0) {
             this.waveState.phase = 'boss_incoming';
             this.waveState.bannerText = '👾 BOSS INCOMING 👾';

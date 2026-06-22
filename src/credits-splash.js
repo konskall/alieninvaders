@@ -75,8 +75,32 @@ export function initCreditsSplash() {
     }
   }
 
+  // Re-trigger the CSS reveal cascade so a REPLAY (menu logo -> showCredits) plays
+  // exactly like a fresh load. Without this the canvas warp restarts but the one-shot
+  // CSS animations stay finished, leaving the key-art at opacity:1 (the teal jellyfish
+  // in the upper-left) sitting statically behind the moving warp.
+  function restartReveal() {
+    const screen = document.getElementById('credits-screen');
+    if (!screen) return;
+    const animated = screen.querySelectorAll(
+      '.cs-keyart, .cs-eyebrow, .cs-wordmark .cs-line, .cs-tagline, .cs-start, .cs-credits, .cs-sweep'
+    );
+    // Toggling display off->on cancels then re-arms each CSS animation from the top.
+    // (Rewriting the inline `animation` shorthand is unreliable: for an animation still
+    //  in its start-delay, Chrome coalesces none->'' in one tick and never restarts it.)
+    animated.forEach(el => { el.style.display = 'none'; });
+    void screen.offsetWidth;            // flush "display:none" so re-show restarts the animations
+    animated.forEach(el => { el.style.display = ''; });
+  }
+
+  let revealStarted = false;
   function start() {
     init();
+    // First run: the CSS reveal animations fire naturally on initial render (keyart
+    // stays opacity:0 through the warp, then reveals). On every REPLAY we must re-arm
+    // them, else the finished key-art sits at opacity:1 behind the moving warp.
+    if (revealStarted) restartReveal();
+    revealStarted = true;
     startT = performance.now();
     if (reduce) { staticField(); return; }
     if (rafId) cancelAnimationFrame(rafId);

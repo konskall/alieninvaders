@@ -17,7 +17,9 @@
   transform: scale(1.06); opacity: 0;
   /* Reveal only AFTER the warp finishes (WARP_MS=1700 in credits-splash.js), so the
      bright key-art (esp. the teal jellyfish in the upper-left) never bleeds through
-     as a static patch over the moving hyperspace particles. */
+     as a static patch over the moving hyperspace particles. On a REPLAY the JS
+     (restartReveal in credits-splash.js) re-arms this animation so it stays hidden
+     during the replayed warp too. */
   animation: cs-artReveal 1.3s ease-out 1.7s forwards, cs-kenburns 26s ease-out 1.7s forwards;
   will-change: transform, opacity;
 }
