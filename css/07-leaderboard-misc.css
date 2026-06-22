@@ -134,7 +134,7 @@
     border: 1px solid rgba(50, 184, 198, 0.4);
     border-radius: var(--radius-base);
     color: var(--color-gray-200);
-    font-size: var(--font-size-base);
+    font-size: 16px;   /* >=16px stops iOS Safari auto-zooming the page on focus (matches .coop-input) */
 }
 
 .score-entry-form .form-control::placeholder {
@@ -211,7 +211,7 @@
 }
 .boss-hud {
     position: fixed;
-    top: 56px;
+    top: calc(56px + env(safe-area-inset-top, 0px));   /* clear the notch / Dynamic Island on iOS */
     left: 50%;
     transform: translateX(-50%);
     display: flex;

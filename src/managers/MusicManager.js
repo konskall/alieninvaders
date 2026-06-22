@@ -3,6 +3,7 @@ export class MusicManager {
     constructor(audioContext) {
         this.ctx = audioContext;
         this.playing = false;
+        this.onStateChange = null;   // optional callback fired when `playing` actually flips (sync or async)
         this.currentBPM = 110;
         this.beat = 0;
         this.melodyBeat = 0;
@@ -36,6 +37,7 @@ export class MusicManager {
         this.playing = true;
         this.nextNoteTime = this.ctx.currentTime + 0.1;
         this._schedule();
+        if (this.onStateChange) this.onStateChange();
     }
 
     stop() {
@@ -44,6 +46,7 @@ export class MusicManager {
             clearTimeout(this.schedulerTimer);
             this.schedulerTimer = null;
         }
+        if (this.onStateChange) this.onStateChange();
     }
 
     toggle() {

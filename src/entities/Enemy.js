@@ -2,7 +2,7 @@ import { CONFIG, DIFFICULTY_CONFIG, GAME_SETTINGS } from '../config.js';
 import { randomRange } from '../utils.js';
 import { Bullet } from './Bullet.js';
 export class Enemy {
-    constructor(x, y, typeName = 'scout') {
+    constructor(x, y, typeName = 'scout', scaling = 1) {
         this.x = x;
         this.y = y;
         this.typeName = typeName;
@@ -13,7 +13,10 @@ export class Enemy {
         this.speed = typeConfig.speed;
         this.color = typeConfig.color;
         this.baseHealth = typeConfig.baseHealth;
-        this.health = Math.ceil(typeConfig.baseHealth * diffConfig.enemyHealthMultiplier);
+        // Progressive toughness ramp (softened): the 100-level progression scaling
+        // (1.0..5.5) raises enemy HP as you climb, so deep runs actually get harder.
+        const progScale = 1 + (Math.max(1, scaling) - 1) * 0.5;
+        this.health = Math.ceil(typeConfig.baseHealth * diffConfig.enemyHealthMultiplier * progScale);
         this.maxHealth = this.health;
         this.points = Math.ceil(typeConfig.points * diffConfig.scoreMultiplier);
         this.lastFireTime = 0;

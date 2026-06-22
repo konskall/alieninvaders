@@ -28,6 +28,10 @@ export class Game {
 		this.leaderboardManager = new LeaderboardManager();
         this.soundManager = new SoundManager();
         this.musicManager = new MusicManager(this.soundManager.audioContext);
+        // Repaint the 🎵/🔇 icon whenever music actually starts/stops — start() flips
+        // `playing` asynchronously when the AudioContext was suspended, so a synchronous
+        // _syncMusicIcon() right after start() would read the stale (pre-resume) state.
+        this.musicManager.onStateChange = () => this._syncMusicIcon();
         this.vibrationManager = new VibrationManager();
 		 this.galleryManager = new GalleryManager();
         
@@ -39,8 +43,12 @@ export class Game {
             joystickStartY: 0,
             joystickCurrentX: 0,
             joystickCurrentY: 0,
-            directionX: 0,
-            directionY: 0,
+            // Separate movement vectors so a held joystick and a concurrent canvas
+            // drag never overwrite each other (the consumer in handleInput picks one).
+            joystickDirX: 0,
+            joystickDirY: 0,
+            dragDirX: 0,
+            dragDirY: 0,
             dragTouchId: null,
             dragActive: false
         };
@@ -132,7 +140,10 @@ export class Game {
     loadSettings() {
         // Calculate automatic sensitivity based on screen size
         this.calculateAutoSensitivity();
-        
+        // Override defaults with the player's persisted preferences (AFTER the
+        // auto-sensitivity default so a stored sensitivity wins) and sync the UI.
+        this._loadStoredSettings();
+
         // Setup sensitivity slider
         const sensitivitySlider = document.getElementById('sensitivity-slider');
         const sensitivityValue = document.getElementById('sensitivity-value');
@@ -178,7 +189,8 @@ export class Game {
             GAME_SETTINGS.soundEnabled = document.getElementById('sound-toggle').checked;
             GAME_SETTINGS.vibrationEnabled = document.getElementById('vibration-toggle').checked;
             GAME_SETTINGS.joystickSensitivity = parseFloat(document.getElementById('sensitivity-slider').value);
-            
+            this._saveSettings();
+
             this.soundManager.enabled = GAME_SETTINGS.soundEnabled;
             this.vibrationManager.enabled = GAME_SETTINGS.vibrationEnabled;
             
@@ -194,7 +206,60 @@ export class Game {
     difficultySelect.value = GAME_SETTINGS.difficulty
   }
     }
-    
+
+    // ---- Settings persistence (localStorage) ----
+    _loadStoredSettings() {
+        try {
+            const stored = JSON.parse(localStorage.getItem('spaceGameSettings'));
+            if (!stored || typeof stored !== 'object') return;
+            for (const k of ['difficulty', 'soundEnabled', 'joystickVisible', 'vibrationEnabled', 'joystickSensitivity', 'autoFire']) {
+                if (stored[k] !== undefined) GAME_SETTINGS[k] = stored[k];
+            }
+            // Coerce/validate every loaded value: localStorage is user-writable and
+            // persists across builds, so a tampered or stale-schema entry must never
+            // reach the UI as a bad type (a non-number sensitivity would throw in
+            // .toFixed and brick startup) or an out-of-range value.
+            GAME_SETTINGS.difficulty = DIFFICULTY_CONFIG[GAME_SETTINGS.difficulty] ? GAME_SETTINGS.difficulty : 'easy';
+            GAME_SETTINGS.soundEnabled = !!GAME_SETTINGS.soundEnabled;
+            GAME_SETTINGS.joystickVisible = !!GAME_SETTINGS.joystickVisible;
+            GAME_SETTINGS.vibrationEnabled = !!GAME_SETTINGS.vibrationEnabled;
+            GAME_SETTINGS.autoFire = !!GAME_SETTINGS.autoFire;
+            const sens = parseFloat(GAME_SETTINGS.joystickSensitivity);
+            GAME_SETTINGS.joystickSensitivity = Number.isFinite(sens) ? Math.min(6, Math.max(2, sens)) : 5.0;
+        } catch (e) { return; }
+        if (this.soundManager) this.soundManager.enabled = GAME_SETTINGS.soundEnabled;
+        if (this.vibrationManager) this.vibrationManager.enabled = GAME_SETTINGS.vibrationEnabled;
+        this._syncSettingsUI();
+    }
+
+    _syncSettingsUI() {
+        const set = (id, prop, val) => { const el = document.getElementById(id); if (el) el[prop] = val; };
+        set('difficulty-select', 'value', GAME_SETTINGS.difficulty);
+        set('joystick-toggle', 'checked', GAME_SETTINGS.joystickVisible);
+        set('auto-fire-toggle', 'checked', GAME_SETTINGS.autoFire);
+        set('sound-toggle', 'checked', GAME_SETTINGS.soundEnabled);
+        set('vibration-toggle', 'checked', GAME_SETTINGS.vibrationEnabled);
+        const s = Number(GAME_SETTINGS.joystickSensitivity);
+        const sStr = (Number.isFinite(s) ? s : 5.0).toFixed(1);
+        const slider = document.getElementById('sensitivity-slider');
+        const sv = document.getElementById('sensitivity-value');
+        if (slider) slider.value = sStr;
+        if (sv) sv.textContent = sStr + 'x';
+    }
+
+    _saveSettings() {
+        try {
+            localStorage.setItem('spaceGameSettings', JSON.stringify({
+                difficulty: GAME_SETTINGS.difficulty,
+                soundEnabled: GAME_SETTINGS.soundEnabled,
+                joystickVisible: GAME_SETTINGS.joystickVisible,
+                vibrationEnabled: GAME_SETTINGS.vibrationEnabled,
+                joystickSensitivity: GAME_SETTINGS.joystickSensitivity,
+                autoFire: GAME_SETTINGS.autoFire,
+            }));
+        } catch (e) {}
+    }
+
     transitionFromCreditsToMenu() {
         if (this.state !== 'credits') return;
 
@@ -246,7 +311,9 @@ export class Game {
         this.bonusPickups = [];
         this.boss = null;
         this.keys = {};
+        this._endCanvasDrag();
         this.musicManager.stop();
+        this._syncMusicIcon();
         this.resetJoystick();
         document.getElementById('start-screen').classList.remove('hidden');
     }
@@ -517,11 +584,19 @@ export class Game {
         // Handle window resize. iOS Safari's toolbar collapse and orientation
         // changes don't always emit a reliable 'resize', so also listen to the
         // visual viewport and orientationchange to re-fit the (letterboxed) canvas.
-        window.addEventListener('resize', () => this.setupCanvas());
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', () => this.setupCanvas());
-        }
-        window.addEventListener('orientationchange', () => setTimeout(() => this.setupCanvas(), 100));
+        // Debounce + coalesce resize/visualViewport/orientation events: each refit
+        // reallocates the canvas backing store, rebuilds gradients and reseeds the
+        // starfield for the new size, so run it once per settled layout (iOS fires
+        // these in bursts while the toolbar/keyboard animates). Reseeding stars also
+        // fills the newly-exposed area instead of leaving it sparse.
+        let _refitTimer = null;
+        const refitCanvas = () => {
+            clearTimeout(_refitTimer);
+            _refitTimer = setTimeout(() => { this.setupCanvas(); this.initializeStars(); }, 100);
+        };
+        window.addEventListener('resize', refitCanvas);
+        if (window.visualViewport) window.visualViewport.addEventListener('resize', refitCanvas);
+        window.addEventListener('orientationchange', refitCanvas);
 
         // Audio lifecycle: stop the music scheduler AND suspend the shared
         // AudioContext whenever the page is hidden or closing (PWA backgrounded,
@@ -537,15 +612,21 @@ export class Game {
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 suspendAudio();
+                this.keys = {};                       // drop held keys so they don't stick on return
+                this._endCanvasDrag();
             } else {
                 const ctx = this.soundManager && this.soundManager.audioContext;
                 if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
                 if (this._musicWasOn && this.state === 'playing' && GAME_SETTINGS.soundEnabled) {
                     this.musicManager.start();
                 }
+                this._syncMusicIcon();
             }
         });
         window.addEventListener('pagehide', suspendAudio);
+        // Held keys/drag would otherwise stay 'pressed' through an Alt-Tab / focus loss
+        // (the browser delivers the keyup to the other window), drifting the ship on return.
+        window.addEventListener('blur', () => { this.keys = {}; this._endCanvasDrag(); });
 
         // Prevent default touch behaviors ONLY during gameplay, so menus, the
         // leaderboard, gallery and story screens can still scroll on touch devices.
@@ -595,9 +676,16 @@ export class Game {
         });
 
         document.getElementById('music-toggle-btn').addEventListener('click', () => {
-            const playing = this.musicManager.toggle();
-            document.getElementById('music-toggle-btn').textContent = playing ? '🎵' : '🔇';
+            this.musicManager.toggle();
+            this._syncMusicIcon();
         });
+    }
+
+    // Keep the 🎵/🔇 button in sync with the ACTUAL music state (start/stop happen
+    // in many places: startGame, showMenu, gameOver, pause/resume, visibility).
+    _syncMusicIcon() {
+        const btn = document.getElementById('music-toggle-btn');
+        if (btn) btn.textContent = (this.musicManager && this.musicManager.playing) ? '🎵' : '🔇';
     }
     
     setupAudioInitialization() {
@@ -648,8 +736,8 @@ export class Game {
         joystickBase.addEventListener('touchstart', (e) => {
             e.preventDefault();
             if (this.state !== 'playing') return;
-            
-            const touch = e.touches[0];
+
+            const touch = e.changedTouches[0];   // the touch that just landed on the joystick (not touches[0], which may be an existing canvas-drag finger)
             this.touchState.joystickActive = true;
             this.touchState.joystickTouchId = touch.identifier;
             
@@ -708,35 +796,32 @@ export class Game {
         // Drag anywhere on canvas for movement (and manual fire if auto-fire OFF)
         canvas.addEventListener('touchstart', (e) => {
             if (this.state !== 'playing') return;
-            
-            // Check if touch is not on joystick or super weapon button
-            const touch = e.touches[0];
-            const touchX = touch.clientX;
-            const touchY = touch.clientY;
-            
+            if (this.touchState.dragActive) return;   // already dragging with another finger
+
             const joystickRect = joystickBase.getBoundingClientRect();
             const superWeaponRect = superWeaponButton.getBoundingClientRect();
-            
-            const onJoystick = touchX >= joystickRect.left && touchX <= joystickRect.right &&
-                              touchY >= joystickRect.top && touchY <= joystickRect.bottom;
-            const onSuperWeapon = touchX >= superWeaponRect.left && touchX <= superWeaponRect.right &&
-                                 touchY >= superWeaponRect.top && touchY <= superWeaponRect.bottom;
-            
-            if (!onJoystick && !onSuperWeapon && !this.touchState.dragActive) {
+
+            // Iterate the touches that JUST started (changedTouches), not touches[0]
+            // (which is the oldest active touch — e.g. a held joystick finger). This
+            // lets a second finger fire/drag while the joystick is held.
+            for (const touch of e.changedTouches) {
+                const touchX = touch.clientX, touchY = touch.clientY;
+                const onJoystick = touchX >= joystickRect.left && touchX <= joystickRect.right &&
+                                  touchY >= joystickRect.top && touchY <= joystickRect.bottom;
+                const onSuperWeapon = touchX >= superWeaponRect.left && touchX <= superWeaponRect.right &&
+                                     touchY >= superWeaponRect.top && touchY <= superWeaponRect.bottom;
+                if (onJoystick || onSuperWeapon) continue;
                 this.touchState.dragActive = true;
                 this.touchState.dragTouchId = touch.identifier;
                 this.updateDragPosition(touchX, touchY);
-                
-                // Manual fire on touch if auto-fire is OFF
-                if (!GAME_SETTINGS.autoFire) {
-                    this.keys['fire'] = true;
-                }
+                if (!GAME_SETTINGS.autoFire) this.keys['fire'] = true;   // manual fire on touch
+                break;
             }
         });
-        
+
         canvas.addEventListener('touchmove', (e) => {
             if (!this.touchState.dragActive) return;
-            
+
             for (let touch of e.touches) {
                 if (touch.identifier === this.touchState.dragTouchId) {
                     this.updateDragPosition(touch.clientX, touch.clientY);
@@ -744,23 +829,27 @@ export class Game {
                 }
             }
         });
-        
-        canvas.addEventListener('touchend', (e) => {
-            for (let touch of e.changedTouches) {
-                if (touch.identifier === this.touchState.dragTouchId) {
-                    this.touchState.dragActive = false;
-                    this.touchState.dragTouchId = null;
-                    this.touchState.directionX = 0;
-                    this.touchState.directionY = 0;
-                    
-                    // Stop manual fire on touch end
-                    if (!GAME_SETTINGS.autoFire) {
-                        this.keys['fire'] = false;
-                    }
-                    break;
-                }
+
+        // touchend AND touchcancel must both end the drag: iOS fires touchcancel
+        // (not touchend) on incoming calls, notifications, edge/system gestures and
+        // palm rejection. Without the touchcancel branch the ship kept drifting (and
+        // kept firing in manual mode) forever after an OS-cancelled drag.
+        const endDrag = (e) => {
+            for (const touch of e.changedTouches) {
+                if (touch.identifier === this.touchState.dragTouchId) { this._endCanvasDrag(); break; }
             }
-        });
+        };
+        canvas.addEventListener('touchend', endDrag);
+        canvas.addEventListener('touchcancel', endDrag);
+    }
+
+    // Clear all canvas-drag state (shared by touchend / touchcancel / lifecycle resets).
+    _endCanvasDrag() {
+        this.touchState.dragActive = false;
+        this.touchState.dragTouchId = null;
+        this.touchState.dragDirX = 0;        // clear ONLY the drag vector — never the joystick's
+        this.touchState.dragDirY = 0;
+        if (!GAME_SETTINGS.autoFire) this.keys['fire'] = false;
     }
     
     updateDragPosition(touchX, touchY) {
@@ -788,20 +877,20 @@ export class Game {
             const totalSensitivity = userSensitivity * autoBoost * 0.25; // Optimized multiplier
             
             // OPTIMIZED: Direct assignment - no smoothing
-            this.touchState.directionX = baseDirX * totalSensitivity;
-            this.touchState.directionY = baseDirY * totalSensitivity;
+            this.touchState.dragDirX = baseDirX * totalSensitivity;
+            this.touchState.dragDirY = baseDirY * totalSensitivity;
 
             // Max move speed scales with the user's sensitivity setting, so the
             // slider has a real effect (default 5.0 -> 2.5, the previous feel).
             const maxMag = GAME_SETTINGS.joystickSensitivity * 0.5;
-            const magnitude = Math.sqrt(this.touchState.directionX ** 2 + this.touchState.directionY ** 2);
+            const magnitude = Math.sqrt(this.touchState.dragDirX ** 2 + this.touchState.dragDirY ** 2);
             if (magnitude > maxMag) {
-                this.touchState.directionX = (this.touchState.directionX / magnitude) * maxMag;
-                this.touchState.directionY = (this.touchState.directionY / magnitude) * maxMag;
+                this.touchState.dragDirX = (this.touchState.dragDirX / magnitude) * maxMag;
+                this.touchState.dragDirY = (this.touchState.dragDirY / magnitude) * maxMag;
             }
         } else {
-            this.touchState.directionX = 0;
-            this.touchState.directionY = 0;
+            this.touchState.dragDirX = 0;
+            this.touchState.dragDirY = 0;
         }
     }
     
@@ -818,8 +907,8 @@ export class Game {
         // OPTIMIZED: Minimal dead zone for instant response
         const adjustedDeadZone = CONFIG.touch.joystickDeadZone * 0.5;
         if (distance < adjustedDeadZone) {
-            this.touchState.directionX = 0;
-            this.touchState.directionY = 0;
+            this.touchState.joystickDirX = 0;
+            this.touchState.joystickDirY = 0;
             joystickStick.style.transform = 'translate(-50%, -50%)';
             return;
         }
@@ -842,16 +931,16 @@ export class Game {
         const autoBoost = GAME_SETTINGS.autoSensitivityMultiplier;
         const totalSensitivity = userSensitivity * autoBoost * 0.2;
         
-        this.touchState.directionX = baseDirX * totalSensitivity;
-        this.touchState.directionY = baseDirY * totalSensitivity;
+        this.touchState.joystickDirX = baseDirX * totalSensitivity;
+        this.touchState.joystickDirY = baseDirY * totalSensitivity;
 
         // Max move speed scales with the user's sensitivity setting, so the
         // slider has a real effect (default 5.0 -> 2.0, the previous feel).
         const maxMag = GAME_SETTINGS.joystickSensitivity * 0.4;
-        const magnitude = Math.sqrt(this.touchState.directionX ** 2 + this.touchState.directionY ** 2);
+        const magnitude = Math.sqrt(this.touchState.joystickDirX ** 2 + this.touchState.joystickDirY ** 2);
         if (magnitude > maxMag) {
-            this.touchState.directionX = (this.touchState.directionX / magnitude) * maxMag;
-            this.touchState.directionY = (this.touchState.directionY / magnitude) * maxMag;
+            this.touchState.joystickDirX = (this.touchState.joystickDirX / magnitude) * maxMag;
+            this.touchState.joystickDirY = (this.touchState.joystickDirY / magnitude) * maxMag;
         }
     }
     
@@ -860,9 +949,9 @@ export class Game {
         
         this.touchState.joystickActive = false;
         this.touchState.joystickTouchId = null;
-        this.touchState.directionX = 0;
-        this.touchState.directionY = 0;
-        
+        this.touchState.joystickDirX = 0;
+        this.touchState.joystickDirY = 0;
+
         joystickStick.style.transform = 'translate(-50%, -50%)';
         joystickStick.classList.remove('active');
     }
@@ -875,6 +964,8 @@ export class Game {
         this._coopBossSig = undefined; this._coopBonusSig = undefined;
         this._coopSuperSig = undefined; this._coopHudSig = undefined;
         this.keys = {};
+        this._endCanvasDrag();   // clear any stale canvas-drag carried over from a previous run
+        this.resetJoystick();    // and stale joystick state
         this.score = 0;
         this.enemies = [];
         this.bullets = [];
@@ -943,19 +1034,22 @@ export class Game {
         document.getElementById('hud').classList.remove('hidden');
         document.getElementById('active-bonuses').classList.remove('hidden');
         
-        // Show touch controls based on settings
-        if ((this.isMobileDevice || CONFIG.touch.enabled) && GAME_SETTINGS.joystickVisible) {
-            document.getElementById('touch-controls').classList.remove('hidden');
-            document.getElementById('joystick-zone').style.display = 'block';
-        } else if (this.isMobileDevice || CONFIG.touch.enabled) {
-            document.getElementById('touch-controls').classList.remove('hidden');
-            document.getElementById('joystick-zone').style.display = 'none';
+        // Touch controls only on touch-capable devices: on a plain (mouse) desktop
+        // the joystick + super button are non-functional and just cover the playfield.
+        const touchCtl = document.getElementById('touch-controls');
+        const hasTouch = this.isMobileDevice || ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+        if (!hasTouch) {
+            touchCtl.classList.add('hidden');
+        } else {
+            touchCtl.classList.remove('hidden');
+            document.getElementById('joystick-zone').style.display = GAME_SETTINGS.joystickVisible ? 'block' : 'none';
         }
-        
+
         if (GAME_SETTINGS.soundEnabled) {
             this.musicManager.stop();
             this.musicManager.start();
         }
+        this._syncMusicIcon();
         this.updateHUD();
         this.updateSuperWeaponUI();
         this.updateDifficultyHUD();
@@ -964,8 +1058,14 @@ export class Game {
     pauseGame() {
         if (this.state === 'playing') {
             this.state = 'paused';
+            this._pauseStart = Date.now();     // freeze wall-clock perk timers across the pause
             document.getElementById('pause-screen').classList.remove('hidden');
             this._updateOrientationPrompt();   // hide the rotate hint behind the pause panel
+            // Silence music while paused (separate flag from the visibility one so a
+            // background-while-paused doesn't clobber it), restore on resume.
+            this._musicPausedOn = !!(this.musicManager && this.musicManager.playing);
+            if (this.musicManager) this.musicManager.stop();
+            this._syncMusicIcon();
         }
     }
 
@@ -974,6 +1074,19 @@ export class Game {
             this.state = 'playing';
             document.getElementById('pause-screen').classList.add('hidden');
             this._updateOrientationPrompt();   // re-show if still landscape
+            // Timed perks are wall-clock based (unlike frame-based invincibility), so
+            // push their startTimes forward by the paused duration — otherwise a long
+            // pause silently burns a shield/rapidFire/multiplier the moment you resume.
+            const pausedMs = this._pauseStart ? (Date.now() - this._pauseStart) : 0;
+            if (pausedMs > 0) {
+                for (const ship of this.roster.players) {
+                    if (!ship || !ship.bonuses) continue;
+                    for (const b of Object.values(ship.bonuses)) if (b && b.startTime) b.startTime += pausedMs;
+                }
+            }
+            this._pauseStart = 0;
+            if (this._musicPausedOn && GAME_SETTINGS.soundEnabled) this.musicManager.start();
+            this._syncMusicIcon();
         }
     }
 
@@ -1129,6 +1242,7 @@ export class Game {
     }
     this.soundManager.gameOver();
     this.musicManager.stop();
+    this._syncMusicIcon();
     document.getElementById('final-score').textContent = this.score;
     if (this.mode === 'solo') {
         this.setupGameOverScoreEntry();
@@ -1182,7 +1296,7 @@ export class Game {
         const scoreElement = document.getElementById('score');
         scoreElement.textContent = Math.floor(this.displayScore);
         
-        // Update progressive difficulty based on score
+        // Update progressive difficulty (level derived from wave number × progressionSpeed)
         this.updateProgressiveDifficulty();
         
         // Highlight score when multiplier is active
@@ -1282,9 +1396,10 @@ escapeHtml(text) {
         const x = randomRange(50, CONFIG.canvas.width - 50);
         const y = -30;
         
-        // Get current level from progressive difficulty
+        // Get current level + toughness scaling from progressive difficulty
         const currentLevel = this.progressiveDifficulty.currentLevel;
-        
+        const scaling = this.progressiveDifficulty.currentScaling || 1;
+
         // Filter enemy types available at current level
         const types = CONFIG.enemy.types;
         const availableTypes = [];
@@ -1298,7 +1413,7 @@ escapeHtml(text) {
         
         // If no available types (shouldn't happen), default to scout_drone
         if (availableTypes.length === 0) {
-            this.enemies.push(new Enemy(x, y, 'scout_drone'));
+            this.enemies.push(new Enemy(x, y, 'scout_drone', scaling));
             return;
         }
         
@@ -1316,13 +1431,17 @@ escapeHtml(text) {
             }
         }
         
-        this.enemies.push(new Enemy(x, y, selectedType));
+        this.enemies.push(new Enemy(x, y, selectedType, scaling));
     }
 
     startNextWave() {
         this.waveState.number++;
 
-        if (this.waveState.number % 10 === 0) {
+        // Boss cadence scales with difficulty: very_easy ~ rare, hard ~ frequent
+        // (normal stays every 10th wave). Boss HP still scales with depth (wave/10).
+        const diffB = DIFFICULTY_CONFIG[GAME_SETTINGS.difficulty] || DIFFICULTY_CONFIG.normal;
+        const bossInterval = Math.max(3, Math.round(10 / (diffB.bossSpawnFrequency || 1)));
+        if (this.waveState.number % bossInterval === 0) {
             this.waveState.phase = 'boss_incoming';
             this.waveState.bannerText = '👾 BOSS INCOMING 👾';
             this.waveState.bannerLife = WAVE_CONFIG.ANNOUNCE_DURATION;
@@ -1362,7 +1481,10 @@ escapeHtml(text) {
 
             case 'spawning':
                 if (ws.enemiesSpawned < ws.enemiesInWave) {
-                    if (this.currentTime - ws.spawnTimer >= WAVE_CONFIG.SPAWN_INTERVAL) {
+                    // Spawn cadence scales with difficulty (hard fills waves faster).
+                    const diffS = DIFFICULTY_CONFIG[GAME_SETTINGS.difficulty] || DIFFICULTY_CONFIG.normal;
+                    const spawnInterval = WAVE_CONFIG.SPAWN_INTERVAL / (diffS.spawnRateMultiplier || 1);
+                    if (this.currentTime - ws.spawnTimer >= spawnInterval) {
                         this.spawnEnemy();
                         ws.enemiesSpawned++;
                         ws.spawnTimer = this.currentTime;
@@ -1656,13 +1778,15 @@ escapeHtml(text) {
         if (this.keys['arrowleft'] || this.keys['a']) dx -= 1;
         if (this.keys['arrowright'] || this.keys['d']) dx += 1;
         
-        // Touch input - prioritize drag, then joystick
-        if (this.touchState.dragActive) {
-            dx = this.touchState.directionX;
-            dy = this.touchState.directionY;
-        } else if (this.touchState.joystickActive) {
-            dx = this.touchState.directionX;
-            dy = this.touchState.directionY;
+        // Touch movement: a held joystick owns movement (so a 2nd finger tapping the
+        // canvas to FIRE can't fight it); otherwise canvas-drag moves. Each input has
+        // its own vector, so they never clobber each other.
+        if (this.touchState.joystickActive) {
+            dx = this.touchState.joystickDirX;
+            dy = this.touchState.joystickDirY;
+        } else if (this.touchState.dragActive) {
+            dx = this.touchState.dragDirX;
+            dy = this.touchState.dragDirY;
         }
 
         // Normalize diagonal movement (only for keyboard)
@@ -1857,6 +1981,10 @@ escapeHtml(text) {
 
         // Animated score lerp
         this.displayScore += (this.score - this.displayScore) * 0.12;
+        // Paint the animating score every frame — updateHUD only fires on discrete
+        // events, so without this the count-up animation never visibly plays.
+        const scoreEl = this._scoreEl || (this._scoreEl = document.getElementById('score'));
+        if (scoreEl) scoreEl.textContent = Math.floor(this.displayScore);
 
         // Update bonus pickups (in-place swap+pop)
         for (let i = this.bonusPickups.length - 1; i >= 0; i--) {
@@ -2138,14 +2266,15 @@ escapeHtml(text) {
                     this.soundManager.damageTaken();
                     this.vibrationManager.damage();
                     this.screenShake.intensity = 0.25;
-                    this.combo = 0;
                     if (this.player.bonuses.shield) {
+                        // Shield fully negates the hit — combo is preserved.
                         delete this.player.bonuses.shield;
                         this.updateActiveBonusesUI();
                         for (let k = 0; k < 20; k++) {
                             this.particles.push(new Particle(this.player.x, this.player.y, '#00CCFF', 'glow'));
                         }
                     } else {
+                        this.combo = 0;
                         this.player.makeInvincible();
                         for (let k = 0; k < 10; k++) {
                             this.particles.push(new Particle(this.player.x, this.player.y, '#FFD700'));
@@ -2167,11 +2296,14 @@ escapeHtml(text) {
                 this.soundManager.damageTaken();
                 this.vibrationManager.damage();
                 this.screenShake.intensity = 0.35;
-                this.combo = 0;
                 if (this.player.bonuses.shield) {
+                    // Shield negates the hit AND grants i-frames, so the still-present
+                    // boss body doesn't instantly cost a real life on the next frame.
                     delete this.player.bonuses.shield;
                     this.updateActiveBonusesUI();
+                    this.player.makeInvincible();
                 } else {
+                    this.combo = 0;
                     this.player.makeInvincible();
                     if (this.player.takeDamage()) {
                         this.gameOver();
@@ -2454,9 +2586,13 @@ escapeHtml(text) {
     }
 
     updateProgressiveDifficulty() {
-        // Level tied to wave number (wave 1 = level 1, wave 100 = level 100)
+        // Level derived from wave number scaled by the difficulty's progressionSpeed:
+        // hard climbs faster (tougher enemy types + higher HP scaling sooner), very_easy
+        // slower. progressionSpeed=1.0 (normal) keeps level == wave, as before.
+        const diffP = DIFFICULTY_CONFIG[GAME_SETTINGS.difficulty] || DIFFICULTY_CONFIG.normal;
         const waveNum = Math.max(1, this.waveState.number);
-        const idx = Math.min(waveNum - 1, PROGRESSIVE_DIFFICULTY.milestones.length - 1);
+        const effLevel = Math.max(1, Math.round((waveNum - 1) * (diffP.progressionSpeed || 1)) + 1);
+        const idx = Math.min(effLevel - 1, PROGRESSIVE_DIFFICULTY.milestones.length - 1);
         const currentMilestone = PROGRESSIVE_DIFFICULTY.milestones[idx];
         
         // Check if difficulty level changed
@@ -2696,15 +2832,18 @@ closeStoryScreen() {
 
     // Apply one hit to a ship (shield/invincibility/damage); ends the game only
     // when ALL ships are dead. Shared by the co-op remote-ship damage path.
-    _hitShip(ship) {
+    _hitShip(ship, fromBoss = false) {
         this.screenShake.intensity = Math.max(this.screenShake.intensity, 0.25);
-        this.combo = 0;
-        if (ship.bonuses && ship.bonuses.shield) {   // the hit ship's OWN shield
+        if (ship.bonuses && ship.bonuses.shield) {   // the hit ship's OWN shield fully negates the hit — combo preserved
             delete ship.bonuses.shield;
             this.updateActiveBonusesUI();
+            // The boss body isn't removed on contact, so grant i-frames after a shield
+            // pop to avoid an instant second hit next frame (mirrors the solo path).
+            if (fromBoss) ship.makeInvincible();
             for (let k = 0; k < 20; k++) this.particles.push(new Particle(ship.x, ship.y, '#00CCFF', 'glow'));
             return;
         }
+        this.combo = 0;
         this.soundManager.damageTaken();
         if (GAME_SETTINGS.vibrationEnabled) this.vibrationManager.damage();
         for (let k = 0; k < 10; k++) this.particles.push(new Particle(ship.x, ship.y, '#FFD700'));
@@ -2734,7 +2873,7 @@ closeStoryScreen() {
             const h = this.homingBullets[i];
             if (distance(h.x, h.y, gs.x, gs.y) < h.radius + gs.size) { this.homingBullets.splice(i, 1); return this._hitShip(gs); }
         }
-        if (this.boss && this.boss.collidesWith(gs.x, gs.y, gs.size)) { return this._hitShip(gs); }
+        if (this.boss && this.boss.collidesWith(gs.x, gs.y, gs.size)) { return this._hitShip(gs, true); }
     }
 
     // The guest renders host snapshots and never runs the simulation, so it must

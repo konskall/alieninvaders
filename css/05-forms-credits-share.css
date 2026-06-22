@@ -431,7 +431,7 @@
   }
 
   .boss-hud {
-    top: 46px;
+    top: calc(46px + env(safe-area-inset-top, 0px));
     min-width: 230px;
     padding: 4px 10px;
     gap: 7px;

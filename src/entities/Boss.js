@@ -9,7 +9,7 @@ export class Boss {
         this.canvasWidth = canvasWidth;
         this.canvasHeight = canvasHeight;
         this.waveNumber = waveNumber;
-        this.bossLevel = Math.floor(waveNumber / 10);
+        this.bossLevel = Math.max(1, Math.floor(waveNumber / 10));   // >=1 so a boss spawned before wave 10 (high boss-frequency difficulties) still has HP
 
         const diffConfig = DIFFICULTY_CONFIG[GAME_SETTINGS.difficulty];
         this.size = 50;
