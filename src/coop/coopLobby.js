@@ -77,7 +77,7 @@ export class CoopLobby {
 
   async createRoom() {
     if (!this._requireDb()) return;
-    this._gen++;
+    const myGen = ++this._gen;   // abort token: leave()/show() bump _gen, stranding this connect
     this.role = 'host';
     this.myName = this._name();
     // Atomically claim a free 4-char code (transaction avoids two hosts racing
@@ -88,12 +88,17 @@ export class CoopLobby {
       const res = await this.db.ref(`rooms/${c}/host`).transaction(
         cur => (cur === null ? { name: this.myName, ts: Date.now() } : undefined)
       );
+      if (myGen !== this._gen) {                                  // user left mid-claim
+        if (res.committed) this.db.ref(`rooms/${c}`).remove();    // undo the just-claimed room
+        return;
+      }
       if (res.committed) { code = c; break; }
     }
     if (!code) { this._setError('Δεν βρέθηκε ελεύθερο δωμάτιο, δοκίμασε ξανά.'); return; }
     this.code = code;
     this.roomRef = this.db.ref(`rooms/${code}`);
     await this.roomRef.child('status').set('waiting');
+    if (myGen !== this._gen) { this.roomRef.remove(); this.roomRef = null; return; }   // left during the status write
     // Clean the room if the host disconnects from the lobby.
     this.roomRef.onDisconnect().remove();
 
@@ -133,13 +138,17 @@ export class CoopLobby {
     if (!room || !room.host) { this._setError('Το δωμάτιο δεν βρέθηκε.'); return; }
     if (room.status !== 'waiting') { this._setError('Το παιχνίδι έχει ήδη ξεκινήσει.'); return; }
 
-    this._gen++;
+    const myGen = ++this._gen;   // abort token: leave()/show() bump _gen, stranding this connect
     this.myName = this._name();
     // Atomically claim the guest seat (transaction avoids two guests racing into
     // the same room; the second one is rejected rather than silently overwriting).
     const res = await this.db.ref(`rooms/${code}/guest`).transaction(
       cur => (cur === null ? { name: this.myName, ts: Date.now() } : undefined)
     );
+    if (myGen !== this._gen) {                                          // user left mid-claim
+      if (res.committed) this.db.ref(`rooms/${code}/guest`).remove();   // release the seat we grabbed
+      return;
+    }
     if (!res.committed) { this._setError('Το δωμάτιο είναι γεμάτο.'); return; }
 
     this.role = 'guest';
@@ -182,10 +191,16 @@ export class CoopLobby {
     // Stop listening to lobby presence; cancel the host room auto-remove so the
     // room survives into gameplay.
     this._detach();
-    // Cancel the lobby-phase auto-removal symmetrically so a transient Firebase blip
-    // during gameplay doesn't delete the room (host) or the guest seat.
-    if (this.role === 'host') this.roomRef.onDisconnect().cancel();
-    else this.roomRef.child('guest').onDisconnect().cancel();
+    // Re-arm onDisconnect as a CLEANUP for the gameplay phase: host removes the whole
+    // room, guest removes its seat, when the tab/app closes mid-match (the common
+    // abandon case; explicit cleanupRoom() in Game.stopCoop covers normal exits).
+    // On the RTDB-relay transport a real disconnect also stalls the game data, so the
+    // 4s watchdog ends the session before this fires. On WebRTC, gameplay rides the
+    // P2P channel, so a transient RTDB-socket blip could delete the room mid-match —
+    // but that's benign: the live DataChannel is unaffected, a 'playing' room isn't
+    // joinable anyway, and the room is GC'd at session end regardless.
+    if (this.role === 'host') this.roomRef.onDisconnect().remove();
+    else this.roomRef.child('guest').onDisconnect().remove();
     this._setConnecting(true);   // visible feedback while the link establishes (can take a few s)
 
     try {
@@ -216,15 +231,23 @@ export class CoopLobby {
     this._listeners = [];
   }
 
-  leave() {
-    this._gen++;   // abort any in-flight _beginGame connect
-    this._setConnecting(false);
+  // Remove this client's RTDB footprint (host: the whole room; guest: its seat)
+  // WITHOUT navigating. Called by the Game on co-op teardown (game over / menu /
+  // restart) so finished rooms don't accumulate in Firebase forever. Safe no-op
+  // when not in a room.
+  cleanupRoom() {
+    this._gen++;   // abort any in-flight connect
     this._detach();
     if (this.roomRef) {
       if (this.role === 'host') this.roomRef.remove();
       else this.roomRef.child('guest').remove();
     }
     this.roomRef = null; this.code = null; this.role = null;
+  }
+
+  leave() {
+    this._setConnecting(false);
+    this.cleanupRoom();
     this.game.showMenu();
   }
 }

@@ -28,6 +28,18 @@
   display: none;
 }
 
+/* Co-op: constrain the HUD to the letterboxed arena width (set per-frame in
+   setupCanvas) so score/lives hug the playfield instead of the black side bars
+   on desktop/iPad. Phones: --coop-hud-w == full width, so this is a no-op. */
+body.coop-hud #hud {
+  width: var(--coop-hud-w, min(750px, 100vw));
+  left: 50%;                      /* keep centered over the letterboxed canvas even */
+  transform: translateX(-50%);    /* where the ≤768px rule sets left:0 / transform:none */
+}
+body.coop-hud #active-bonuses {
+  right: max(10px, calc(50% - var(--coop-hud-w, 710px) / 2 + 10px));
+}
+
 .hud-left,
 .hud-right {
   display: flex;

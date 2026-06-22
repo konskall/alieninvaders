@@ -336,6 +336,16 @@ export class Game {
             this.boss.canvasHeight = height;
         }
 
+        // Co-op: pin the HUD / perk column to the letterboxed arena width so they
+        // hug the playfield instead of floating over the black bars on desktop/iPad.
+        // On phones the arena already spans the full width, so this is a no-op there.
+        if (coop) {
+            document.documentElement.style.setProperty('--coop-hud-w', cssW + 'px');
+            document.body.classList.add('coop-hud');
+        } else {
+            document.body.classList.remove('coop-hud');
+        }
+
         this._updateOrientationPrompt();
     }
 
@@ -1489,6 +1499,31 @@ escapeHtml(text) {
         return out;
     }
 
+    // Cosmetic + audio payload of a super-weapon blast (shockwave, 50-particle
+    // flash, screen shake, sound). Extracted so the co-op GUEST can reproduce it
+    // locally off the synced superActive edge — the host's particles/shockwaves
+    // never cross the wire. `withSound` is false for the partner's blast so two
+    // near-simultaneous supers don't double up the audio.
+    _superBlastFx(ox, oy, withSound = true) {
+        if (withSound) {
+            this.soundManager.superWeapon();
+            this.vibrationManager.superWeapon();
+        }
+        this.screenShake.intensity = Math.max(this.screenShake.intensity, CONFIG.superWeapon.shakeIntensity);
+        this.shockwaves.push({
+            x: ox, y: oy, radius: 0,
+            maxRadius: Math.max(CONFIG.canvas.width, CONFIG.canvas.height) * 1.5,
+            life: 1, speed: 15
+        });
+        for (let i = 0; i < 50; i++) {
+            this.particles.push(new Particle(ox, oy, i % 2 === 0 ? '#FFD700' : '#FFA500', 'glow'));
+        }
+        // A few large shockwaves to sell the effect without particle spam.
+        for (let i = 0; i < 3; i++) {
+            this.shockwaves.push(new Shockwave(CONFIG.canvas.width / 2 + (i - 1) * 150, CONFIG.canvas.height / 2, '#FFD700'));
+        }
+    }
+
     // `sup` is the super-weapon state to fire (each player has their own in co-op),
     // `originShip` is where the blast/FX originate. Defaults = the LOCAL player's.
     activateSuperWeapon(sup = this.superWeapon, originShip = this.player) {
@@ -1503,50 +1538,16 @@ escapeHtml(text) {
         sup.ready = false;
         sup.charge = 0;
 
-        // Sound and vibration feedback
-        this.soundManager.superWeapon();
-        this.vibrationManager.superWeapon();
-
-        // Screen shake
-        this.screenShake.intensity = CONFIG.superWeapon.shakeIntensity;
-
         const ox = originShip ? originShip.x : CONFIG.canvas.width / 2;
         const oy = originShip ? originShip.y : CONFIG.canvas.height / 2;
+        this._superBlastFx(ox, oy, true);
 
-        // Create massive shockwave
-        this.shockwaves.push({
-            x: ox,
-            y: oy,
-            radius: 0,
-            maxRadius: Math.max(CONFIG.canvas.width, CONFIG.canvas.height) * 1.5,
-            life: 1,
-            speed: 15
-        });
-
-        // Create flash effect
-        for (let i = 0; i < 50; i++) {
-            this.particles.push(new Particle(
-                ox,
-                oy,
-                i % 2 === 0 ? '#FFD700' : '#FFA500',
-                'glow'
-            ));
-        }
-        
-        // Destroy all enemies — lightweight: score + 2-3 shockwaves instead of per-enemy explosions
+        // Destroy all enemies — lightweight: score + shockwaves instead of per-enemy explosions
         const supMult = (originShip && originShip.bonuses && originShip.bonuses.multiplier) ? 2 : 1;  // the firing player's perk
         this.enemies.forEach(enemy => {
             this.score += enemy.points * supMult;
             this.killCount++;   // super-weapon kills count toward the team total too
         });
-        // A few large shockwaves to sell the effect without particle spam
-        for (let i = 0; i < 3; i++) {
-            this.shockwaves.push(new Shockwave(
-                CONFIG.canvas.width / 2 + (i - 1) * 150,
-                CONFIG.canvas.height / 2,
-                '#FFD700'
-            ));
-        }
         this.enemies = [];
 
         if (this.boss) {
@@ -1722,6 +1723,7 @@ escapeHtml(text) {
             for (const ship of this.roster.players) {
                 if (ship) ship.update();
             }
+            this._coopGuestCosmetics();
             return;
         }
         // Co-op host: the remote (guest) ship auto-fires too.
@@ -1929,11 +1931,12 @@ escapeHtml(text) {
                             isCritical ? 18 : 14
                         );
 
-                        // Killing spree every 5 kills
+                        // Killing spree every 5 kills — anchor over the ship that
+                        // actually earned the kill (ob), not always the host ship.
                         if (this.combo % 5 === 0) {
                             this.spawnFloatingText(
-                                this.player.x,
-                                this.player.y - 60,
+                                ob.x,
+                                ob.y - 60,
                                 `KILLING SPREE x${this.combo}!`,
                                 '#FF6B35',
                                 20
@@ -2627,6 +2630,11 @@ closeStoryScreen() {
         GAME_SETTINGS.difficulty = DIFFICULTY_CONFIG[difficulty] ? difficulty : 'easy';
         this.startGame();                       // full reset + 1 local ship + HUD + loop + state='playing'
         this.mode = role === 'host' ? 'coopHost' : 'coopGuest';
+        // Clear cross-snapshot edge/diff trackers so a back-to-back session can't
+        // inherit a stale value (missed super-blast FX, skipped first wave banner).
+        this._coopLastSuperSelf = this._coopLastSuperPartner = false;
+        this._coopLastBanner = '';
+        this._coopBossSig = this._coopSuperSig = this._coopHudSig = this._coopBonusSig = '';
         // Switch to the fixed shared arena (letterboxed) BEFORE placing ships, so
         // both devices lay out and exchange positions in identical coordinates.
         this.coopArenaActive = true;
@@ -2661,6 +2669,9 @@ closeStoryScreen() {
         this._coopEnded = true;
         if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
         if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
+        // Remove our RTDB footprint (host: whole room, guest: its seat) so finished
+        // online rooms don't accumulate in Firebase forever. No-op if not in a room.
+        if (this.coopLobby) this.coopLobby.cleanupRoom();
         this.mode = 'solo';
         // Drop the fixed arena and resize the canvas back to full-screen for solo.
         if (this.coopArenaActive) {
@@ -2726,6 +2737,35 @@ closeStoryScreen() {
         if (this.boss && this.boss.collidesWith(gs.x, gs.y, gs.size)) { return this._hitShip(gs); }
     }
 
+    // The guest renders host snapshots and never runs the simulation, so it must
+    // advance the purely-cosmetic local state itself — otherwise the starfield,
+    // the boss pulse/hit-flash, enemy-bullet trails and super-blast FX freeze.
+    // No gameplay/authoritative state is touched here.
+    _coopGuestCosmetics() {
+        this.stars.forEach(star => star.update(CONFIG.canvas));
+        // Super-blast particles (spawned locally on the synced superActive edge).
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            this.particles[i].update();
+            if (this.particles[i].isDead()) { this.particles[i] = this.particles[this.particles.length - 1]; this.particles.pop(); }
+        }
+        for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+            const wave = this.shockwaves[i];
+            wave.radius += wave.speed; wave.life -= 0.02;
+            if (wave.life <= 0 || wave.radius >= wave.maxRadius) { this.shockwaves[i] = this.shockwaves[this.shockwaves.length - 1]; this.shockwaves.pop(); }
+        }
+        if (this.screenShake.intensity > 0) {
+            this.screenShake.x = (Math.random() - 0.5) * this.screenShake.intensity * 20;
+            this.screenShake.y = (Math.random() - 0.5) * this.screenShake.intensity * 20;
+            this.screenShake.intensity *= 0.9;
+        } else { this.screenShake.x = 0; this.screenShake.y = 0; }
+        if (this.boss) { this.boss.pulsePhase += 0.05; if (this.boss.hitFlash > 0) this.boss.hitFlash--; }
+        // Advance bullet core pulse + decay motion trails (pushed on move in reconcile).
+        for (const b of this.bullets) {
+            b.pulsePhase += 0.2;
+            if (b.trail && b.trail.length) { b.trail.forEach(t => t.life -= 0.05); b.trail = b.trail.filter(t => t.life > 0); }
+        }
+    }
+
     coopGetLocalInput() {
         const s = this.player;
         const sup = !!this._coopSuperReq;
@@ -2764,7 +2804,9 @@ closeStoryScreen() {
                    banner: (this.currentTime - (this.waveState.bannerStartTime || 0) < WAVE_CONFIG.ANNOUNCE_DURATION) ? this.waveState.bannerText : '',
                    // Send the PARTNER's gauge (superWeaponRemote = the guest's own) so the
                    // guest sees and controls its own super, independent of the host's.
-                   superCharge: this.superWeaponRemote.charge, superReady: this.superWeaponRemote.ready, superActive: this.superWeaponRemote.active },
+                   superCharge: this.superWeaponRemote.charge, superReady: this.superWeaponRemote.ready, superActive: this.superWeaponRemote.active,
+                   // The host player's OWN super-active flag, so the guest can render the host's blast FX too.
+                   superActiveHost: this.superWeapon.active },
             events: [],
         };
     }
@@ -2784,19 +2826,27 @@ closeStoryScreen() {
     coopApplySnapshot(msg) {
         if (!msg) return;
         this._lastRecvAt = Date.now();
-        this._coopReconcile(this.enemies, msg.enemies || [],
+        // Array.isArray (not `|| []`): a garbled/hostile non-array with a numeric
+        // `length` would otherwise drive _coopReconcile into character-by-character
+        // iteration and feed primitives into the entity factories.
+        this._coopReconcile(this.enemies, Array.isArray(msg.enemies) ? msg.enemies : [],
             (e, d) => e.typeName !== d.type,
             d => new Enemy(d.x, d.y, d.type),
             (e, d) => { e.x = d.x; e.y = d.y; e.health = d.hp; });
-        this._coopReconcile(this.bullets, msg.bullets || [],
+        this._coopReconcile(this.bullets, Array.isArray(msg.bullets) ? msg.bullets : [],
             (b, d) => b.isPlayerBullet !== d.p || b.enemyType !== d.et,
             d => new Bullet(d.x, d.y, 0, 0, d.color, d.p, d.et),
-            (b, d) => { b.x = d.x; b.y = d.y; b.color = d.color; });
-        this._coopReconcile(this.homingBullets, msg.homing || [],
+            (b, d) => {
+                // Drop a motion-trail crumb at the old position when an enemy
+                // projectile moves (the guest never runs Bullet.update()).
+                if (!d.p && (b.x !== d.x || b.y !== d.y)) { b.trail.push({ x: b.x, y: b.y, life: 1 }); if (b.trail.length > 8) b.trail.shift(); }
+                b.x = d.x; b.y = d.y; b.color = d.color;
+            });
+        this._coopReconcile(this.homingBullets, Array.isArray(msg.homing) ? msg.homing : [],
             () => false,
             d => new HomingBullet(d.x, d.y, d.x, d.y),
             (h, d) => { h.x = d.x; h.y = d.y; });
-        this._coopReconcile(this.bonusPickups, msg.pickups || [],
+        this._coopReconcile(this.bonusPickups, Array.isArray(msg.pickups) ? msg.pickups : [],
             (p, d) => p.type !== d.type,
             d => new BonusPickup(d.x, d.y, d.type),
             (p, d) => { p.x = d.x; p.y = d.y; });
@@ -2814,7 +2864,7 @@ closeStoryScreen() {
 
         const localIdx = this.roster.localIndex;
         const nowB = Date.now();
-        (msg.ships || []).forEach(s => {
+        (Array.isArray(msg.ships) ? msg.ships : []).forEach(s => {
             const ship = this.roster.players[s.i];
             if (!ship) return;
             ship.health = s.health;
@@ -2828,8 +2878,12 @@ closeStoryScreen() {
             }
         });
 
-        // The LOCAL player's perks drive the HUD; rebuild only when they change.
-        const bonusSig = Object.keys((this.player && this.player.bonuses) || {}).sort().join(',');
+        // The LOCAL player's perks drive the HUD. Include the displayed whole-second
+        // remaining in the signature so the countdown actually ticks down on the
+        // guest (re-renders at most ~1x/sec/perk — no per-tick innerHTML thrash).
+        const pb = (this.player && this.player.bonuses) || {};
+        const nb = Date.now();
+        const bonusSig = Object.keys(pb).sort().map(k => k + ':' + Math.max(0, Math.ceil(((pb[k].duration || 0) - (nb - (pb[k].startTime || nb))) / 1000))).join(',');
         if (bonusSig !== this._coopBonusSig) { this._coopBonusSig = bonusSig; this.updateActiveBonusesUI(); }
 
         if (msg.hud) {
@@ -2842,6 +2896,18 @@ closeStoryScreen() {
             // Only touch the gauge DOM when it changed (this runs ~30x/sec on the guest).
             const superSig = this.superWeapon.charge + '|' + this.superWeapon.ready + '|' + this.superWeapon.active;
             if (superSig !== this._coopSuperSig) { this._coopSuperSig = superSig; this.updateSuperWeaponUI(); }
+            // Guest-side super-blast FX: the host's particles/shockwaves never cross
+            // the wire, so reproduce the blast locally on the RISING edge of each
+            // gauge's active flag (compared against the authoritative host value, not
+            // our locally-flickering mirror). Our own super -> our ship, with sound;
+            // the partner's -> their ship, visual-only.
+            const selfActive = !!msg.hud.superActive;          // our gauge (host runs it for us)
+            if (selfActive && !this._coopLastSuperSelf && this.player) this._superBlastFx(this.player.x, this.player.y, true);
+            this._coopLastSuperSelf = selfActive;
+            const partnerActive = !!msg.hud.superActiveHost;   // the host player's own super
+            const rs = this.coopRemoteShip;
+            if (partnerActive && !this._coopLastSuperPartner && rs) this._superBlastFx(rs.x, rs.y, false);
+            this._coopLastSuperPartner = partnerActive;
             // Wave number (guest never runs the wave system).
             if (typeof msg.hud.wave === 'number') {
                 this.waveState.number = msg.hud.wave;
