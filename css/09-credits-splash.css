@@ -15,7 +15,10 @@
   position: absolute; inset: 0; z-index: 1;
   background: url("../Gallery/mothership.png") center 36% / cover no-repeat;
   transform: scale(1.06); opacity: 0;
-  animation: cs-artReveal 1.3s ease-out 1.15s forwards, cs-kenburns 26s ease-out 1.6s forwards;
+  /* Reveal only AFTER the warp finishes (WARP_MS=1700 in credits-splash.js), so the
+     bright key-art (esp. the teal jellyfish in the upper-left) never bleeds through
+     as a static patch over the moving hyperspace particles. */
+  animation: cs-artReveal 1.3s ease-out 1.7s forwards, cs-kenburns 26s ease-out 1.7s forwards;
   will-change: transform, opacity;
 }
 @keyframes cs-artReveal { from { opacity: 0; transform: scale(1.16); } to { opacity: 1; transform: scale(1.06); } }
