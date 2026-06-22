@@ -3015,6 +3015,18 @@ closeStoryScreen() {
             b.pulsePhase += 0.2;
             if (b.trail && b.trail.length) { b.trail.forEach(t => t.life -= 0.05); b.trail = b.trail.filter(t => t.life > 0); }
         }
+        // Advance floating texts. The guest spawns them locally (e.g. the "THREAT N!"
+        // level-up cue fires via updateHUD -> updateProgressiveDifficulty on a snapshot),
+        // but updateGame returns early before the host's float-text loop runs — so
+        // without this they freeze on screen forever (the reported "THREAT stuck on the
+        // guest" bug). draw() already renders them.
+        for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+            this.floatingTexts[i].update();
+            if (this.floatingTexts[i].isDead()) {
+                this.floatingTexts[i] = this.floatingTexts[this.floatingTexts.length - 1];
+                this.floatingTexts.pop();
+            }
+        }
     }
 
     // Co-op: make a partner's death impossible to miss for the surviving player — a
