@@ -1245,6 +1245,7 @@ export class Game {
         // netcode loop — otherwise it keeps writing ~15-30x/sec for the whole game-over
         // screen (Firebase bandwidth/quota on the relay path).
         try { if (this.coopSession) this.coopSession.tick(); } catch (e) {}
+        this._coopPumpActive = false;   // stop the rAF netcode pump (final snapshot already sent above)
         if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
         this._coopReleaseWakeLock();
     }
@@ -2785,30 +2786,53 @@ closeStoryScreen() {
         if (session.transport && session.transport.onClose) {
             session.transport.onClose(() => this._coopDisconnected());
         }
-        if (this._coopTimer) clearInterval(this._coopTimer);
-        // ~30 Hz over P2P WebRTC (smooth); back off to ~15 Hz on the RTDB relay,
-        // where every tick is a Firebase write (bandwidth/cost) on both sides.
-        const tickMs = (session.transport && session.transport.relay) ? 66 : 33;
+        if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
+        // Drive the netcode from the rAF gameLoop (via _coopPump), NOT setInterval.
+        // iOS Safari throttles/coalesces setInterval to ~17Hz even foreground+awake
+        // (observed as TX/s 17 on iPhone), while it keeps rAF at the display rate
+        // (~60Hz) — so an rAF accumulator holds a steady ~30Hz send. ~30 Hz over P2P
+        // WebRTC; back off to ~15 Hz on the RTDB relay (every tick is a Firebase write).
+        // (Caveat: iOS Low Power Mode / thermal throttle clamps rAF itself to ~30fps —
+        // still meets the 30Hz/15Hz target, but with no headroom above it.)
+        this._coopTickMs = (session.transport && session.transport.relay) ? 66 : 33;
+        this._coopAccum = 0;
         this._lastTickAt = Date.now();
-        this._coopTimer = setInterval(() => {
-            try { session.tick(); if (this._coopDebug) this._coopTicksSent++; } catch (e) { /* transport closed */ }
-            const now = Date.now();
-            // If the interval itself was throttled/frozen (hidden or locked tab), the
-            // gap since the last tick is many multiples of tickMs. Don't count that
-            // frozen wall-clock against the watchdog — re-baseline and judge the NEXT
-            // clean window. Without this a brief phone-lock self-"disconnects" on resume.
-            const gap = now - (this._lastTickAt || now);
-            this._lastTickAt = now;
-            if (gap > tickMs * 4) { this._lastRecvAt = now; return; }
-            // Watchdog: no message from the peer for 4s => treat as disconnected.
-            if (this.state === 'playing' && now - this._lastRecvAt > 4000) this._coopDisconnected();
-        }, tickMs);
+        this._coopPumpActive = true;
         // Keep the screen awake during co-op. Without this, when a player's phone dims
-        // or locks the browser throttles/freezes our setInterval AND rAF to ~1Hz: the
-        // HOST stops broadcasting snapshots (the guest freezes, then snaps on resume),
-        // and a guest screen-dim freezes its render. This is the #1 cause of the
-        // "guest κόλλημα". The lock auto-releases when hidden -> re-acquired on resume.
+        // or locks the browser freezes rAF (and timers): the HOST stops broadcasting
+        // (the guest freezes, then snaps on resume). This is the #1 cause of the "guest
+        // κόλλημα". The lock auto-releases when hidden -> re-acquired on resume.
         this._coopAcquireWakeLock();
+    }
+
+    // rAF-driven network pump (called from gameLoop each frame while in co-op). Sends
+    // at most one snapshot/input per _coopTickMs using a wall-clock accumulator, so the
+    // effective rate is min(display rate, ~30Hz) and immune to setInterval throttling.
+    _coopPump() {
+        if (!this._coopPumpActive || !this.coopSession) return;
+        const now = Date.now();
+        const gap = now - (this._lastTickAt || now);
+        this._lastTickAt = now;
+        // rAF stalls when the tab is hidden / screen locked. On resume the first frame
+        // sees a huge gap — don't count that frozen wall-clock against the watchdog;
+        // re-baseline and judge the next clean window (avoids a false self-disconnect).
+        if (gap > this._coopTickMs * 4) { this._lastRecvAt = now; this._coopAccum = 0; return; }
+        // Fixed-timestep accumulator: send once per tickMs of real elapsed time,
+        // keeping the remainder so the rate averages a true ~30Hz independent of the
+        // (variable) frame rate — not (tickMs + one frame) as a reset-to-now would give.
+        this._coopAccum += gap;
+        // Send AT MOST once per frame (single `if`, not a drain `while`): the host
+        // world only advances once per frame (updateGame), so a 2nd send in the same
+        // frame would ship a DUPLICATE state (dropped by the guest's seq-check, and a
+        // wasted Firebase write on the relay). Below ~30fps the send rate tracks the
+        // frame rate, which is correct — there are no extra distinct states to send.
+        if (this._coopAccum >= this._coopTickMs) {
+            this._coopAccum -= this._coopTickMs;
+            if (this._coopAccum > this._coopTickMs) this._coopAccum = this._coopTickMs;   // bound the backlog to one tick (frame hitch / sub-30fps) — no catch-up burst, no lost cadence
+            try { this.coopSession.tick(); if (this._coopDebug) this._coopTicksSent++; } catch (e) { /* transport closed */ }
+        }
+        // Watchdog: no message from the peer for 4s => treat as disconnected.
+        if (this.state === 'playing' && now - this._lastRecvAt > 4000) this._coopDisconnected();
     }
 
     async _coopAcquireWakeLock() {
@@ -2828,6 +2852,7 @@ closeStoryScreen() {
         if (this._coopEnded) return;
         this._coopEnded = true;
         const wasHost = this.mode === 'coopHost';
+        this._coopPumpActive = false;   // stop the rAF netcode pump
         if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
         if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
         this._coopReleaseWakeLock();
@@ -2914,6 +2939,7 @@ closeStoryScreen() {
         // _coopDisconnected() and pop the "disconnected" overlay on an
         // intentional leave (menu / restart).
         this._coopEnded = true;
+        this._coopPumpActive = false;   // stop the rAF netcode pump
         if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
         if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
         this._coopReleaseWakeLock();
@@ -3262,6 +3288,9 @@ closeStoryScreen() {
     gameLoop() {
         this.handleInput();
         this.updateGame();
+        // Co-op: drive the netcode send/watchdog from rAF (steady ~30Hz, unlike a
+        // throttled setInterval). No-op in solo or after the session ends.
+        if (this.mode !== 'solo') this._coopPump();
         // Only paint the game canvas while playing — menus/pause/game-over are
         // opaque screens on top, so rendering underneath wastes battery/GPU.
         if (this.state === 'playing') this.draw();
