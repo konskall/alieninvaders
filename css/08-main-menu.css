@@ -162,6 +162,32 @@
 }
 .menu-hint b { color: var(--m-teal); font-weight: 700; }
 
+/* discreet PWA "install app" pill — revealed by src/pwaInstall.js only when the app
+   is actually installable (Chromium) or on iOS; otherwise it stays hidden */
+.pwa-install {
+  align-self: center;                 /* override .menu-shell's align-items:stretch */
+  display: inline-flex; align-items: center; gap: 7px;
+  margin-top: -4px; padding: 7px 15px; border-radius: 999px; cursor: pointer;
+  background: rgba(50,184,198,.07); border: 1px solid rgba(50,184,198,.22);
+  color: var(--m-teal); font-family: 'Exo 2', sans-serif;
+  font-weight: 600; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase;
+  opacity: .82; transition: opacity .2s ease, border-color .2s ease, background .2s ease, color .2s ease;
+}
+.pwa-install svg { opacity: .9; }
+@media (hover: hover) and (pointer: fine) {
+  .pwa-install:hover { opacity: 1; color: var(--m-teal-bright);
+    border-color: var(--m-teal); background: rgba(50,184,198,.14); }
+}
+#pwa-install-btn.hidden { display: none; }   /* beat the later-cascade .pwa-install display */
+
+/* PWA iOS install instructions (reuses the .modal / .modal-content shell) */
+.pwa-ios-content { max-width: 380px; }
+.pwa-ios-lead { margin: 0 0 14px; color: var(--m-ink); font-size: 14px; line-height: 1.5; }
+.pwa-ios-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 11px;
+  color: var(--m-ink); font-size: 14px; line-height: 1.45; }
+.pwa-ios-steps b { color: var(--m-teal-bright); font-weight: 700; }
+.pwa-ios-share { display: inline-flex; vertical-align: middle; color: var(--m-teal-bright); margin: 0 1px; }
+
 @media (prefers-reduced-motion: reduce) {
   #start-screen .menu-status .dot,
   #start-screen .menu-launch::after { animation: none; }

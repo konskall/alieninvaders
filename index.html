@@ -292,6 +292,11 @@
                     </button>
                 </nav>
 
+                <button class="pwa-install hidden" id="pwa-install-btn" type="button">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v11"/><path d="M8 10l4 4 4-4"/><path d="M5 20h14"/></svg>
+                    Εγκατάσταση εφαρμογής
+                </button>
+
                 <div class="menu-hint">
                     <div id="desktop-instructions"><b>Κίνηση:</b> Βέλη / WASD · <b>Σούπερ όπλο:</b> E · <b>Παύση:</b> P</div>
                     <div id="mobile-instructions" class="hidden"><b>Σύρε</b> για κίνηση · <b>Αυτόματα πυρά</b> πάντα ενεργά</div>
@@ -518,6 +523,26 @@
             <div id="leaderboard-display">
                 <div id="leaderboard-list" class="leaderboard-list"></div>
             </div>
+        </div>
+    </div>
+</div>
+
+	<!-- PWA install instructions (iOS Safari has no programmatic install) -->
+<div id="pwa-ios-popup" class="modal hidden">
+    <div class="modal-content pwa-ios-content">
+        <div class="modal-header">
+            <h2>Εγκατάσταση</h2>
+            <button class="modal-close" data-pwa-close aria-label="Κλείσιμο">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p class="pwa-ios-lead">Πρόσθεσε το Alien Invaders στην αρχική σου οθόνη και παίξε σαν κανονική εφαρμογή:</p>
+            <ol class="pwa-ios-steps">
+                <li>Πάτα το <b>Κοινή χρήση</b>
+                    <span class="pwa-ios-share" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><rect x="5" y="11" width="14" height="9" rx="2"/></svg></span>
+                    στη μπάρα του Safari.</li>
+                <li>Διάλεξε <b>«Πρόσθεση στην αρχική οθόνη»</b>.</li>
+                <li>Πάτα <b>Πρόσθεση</b> πάνω δεξιά — έτοιμο! 🚀</li>
+            </ol>
         </div>
     </div>
 </div>
