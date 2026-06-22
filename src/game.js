@@ -2511,14 +2511,21 @@ escapeHtml(text) {
             lines.push(`stale ${stale}ms`);
         }
         ctx.save();
-        ctx.font = '11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-        const pad = 5, lh = 14, boxW = 176, boxH = pad * 2 + lines.length * lh;
-        ctx.fillStyle = 'rgba(0,0,0,0.62)';
-        ctx.fillRect(4, 4, boxW, boxH);
+        ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        // Centered on the arena so the HUD (top) never covers it — meant to be read
+        // and screenshot during a test run.
+        const pad = 9, lh = 18, boxW = 224, boxH = pad * 2 + lines.length * lh;
+        const boxX = Math.round(CONFIG.canvas.width / 2 - boxW / 2);
+        const boxY = Math.round(CONFIG.canvas.height / 2 - boxH / 2);
+        const cx = boxX + boxW / 2;
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(boxX, boxY, boxW, boxH);
+        ctx.strokeStyle = 'rgba(124,252,0,0.7)'; ctx.lineWidth = 1;
+        ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1);
         for (let i = 0; i < lines.length; i++) {
             ctx.fillStyle = '#7CFC00';
             if (isGuest && i === lines.length - 1 && stale > 200) ctx.fillStyle = '#FF5544';   // staleness alarm
-            ctx.fillText(lines[i], 4 + pad, 4 + pad + i * lh);
+            ctx.fillText(lines[i], cx, boxY + pad + i * lh);
         }
         ctx.restore();
     }
