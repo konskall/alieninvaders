@@ -2609,7 +2609,7 @@ escapeHtml(text) {
             this.spawnFloatingText(
                 CONFIG.canvas.width / 2,
                 CONFIG.canvas.height / 2,
-                `LEVEL ${currentMilestone.level}!`,
+                `THREAT ${currentMilestone.level}!`,
                 '#FFD700',
                 28
             );
@@ -2628,8 +2628,9 @@ escapeHtml(text) {
         
         const milestone = this.progressiveDifficulty.currentMilestone;
         
-        // Update text with "X/100" format
-        levelEl.textContent = `LEVEL ${milestone.level}/100`;
+        // Threat = enemy-toughness depth (1..100), distinct from the Wave (combat round)
+        // counter. Shown as "M/100" under the "Threat" label; percent = enemy HP bonus.
+        levelEl.textContent = `${milestone.level}/100`;
         percentEl.textContent = milestone.text;
         
         // Update color class
