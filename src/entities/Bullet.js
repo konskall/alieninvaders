@@ -59,6 +59,24 @@ export class Bullet {
 
         ctx.globalAlpha = 1;
 
+        // Mobile fast path: skip the per-frame createRadialGradient + addColorStop
+        // allocations (heavy GC churn at 60fps with many bullets on the weaker co-op
+        // guest). Glow is already disabled under lowFX, so a flat fill looks nearly
+        // identical. Keeps the per-type size/colour for readability.
+        if (CONFIG.lowFX) {
+            let r = this.radius || 6, c = this.color || '#FF6600';
+            if (this.enemyType === 'scout_drone') { r = 6; c = '#00FFFF'; }
+            else if (this.enemyType === 'fighter_wasp') { r = 7; c = '#FF8800'; }
+            else if (this.enemyType === 'heavy_cruiser') { r = 11; c = '#CC33CC'; }
+            else if (this.enemyType === 'behemoth_dreadnought' || this.enemyType === 'alien_leviathan' || this.enemyType === 'void_entity' || this.enemyType === 'elite_guardian' || this.enemyType === 'swarm_commander') { r = 13; c = '#FF22FF'; }
+            ctx.fillStyle = c;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
+
         if (this.enemyType === 'scout_drone') {
             // Small energetic cyan dot with glow
             const pulse = 1 + Math.sin(this.pulsePhase) * 0.3;

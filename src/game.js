@@ -621,6 +621,14 @@ export class Game {
                     this.musicManager.start();
                 }
                 this._syncMusicIcon();
+                // Co-op: a hidden tab freezes our timer/rAF, so _lastRecvAt is stale on
+                // return — give a fresh grace window so the 4s watchdog doesn't instantly
+                // false-"disconnect", and re-baseline interpolation timing.
+                if (this.mode !== 'solo') {
+                    const t = Date.now();
+                    this._lastRecvAt = t; this._lastTickAt = t;
+                    this._coopSnapPrevT = this._coopSnapLastT = t;
+                }
             }
         });
         window.addEventListener('pagehide', suspendAudio);
@@ -1056,6 +1064,10 @@ export class Game {
     }
 
     pauseGame() {
+        // No pause in co-op: it is host-authoritative and the partner keeps playing,
+        // so a local pause only freezes/ desyncs one side (the host would still
+        // broadcast a live, advancing world). Simply ignore pause requests in co-op.
+        if (this.mode !== 'solo') return;
         if (this.state === 'playing') {
             this.state = 'paused';
             this._pauseStart = Date.now();     // freeze wall-clock perk timers across the pause
@@ -1841,6 +1853,10 @@ escapeHtml(text) {
             }
         }
 
+        // Co-op: flag + FX the moment a partner goes down (runs on both host & guest,
+        // before the guest's early return below).
+        this._checkCoopPartnerDeath();
+
         // Co-op guest does not simulate — it renders host snapshots (own ship moves in handleInput).
         // BUT its own ship still needs update() each frame: handleInput keeps adding
         // trail particles via move(), and only update() decays/removes them. Without
@@ -2460,6 +2476,9 @@ escapeHtml(text) {
             this.ctx.restore();
         }
 
+        // Co-op: "partner down" banner on top of everything
+        if (this.state === 'playing' && this.mode !== 'solo') this._drawPartnerDownBanner();
+
         this.ctx.restore();
     }
 
@@ -2712,10 +2731,19 @@ closeStoryScreen() {
         // ~30 Hz over P2P WebRTC (smooth); back off to ~15 Hz on the RTDB relay,
         // where every tick is a Firebase write (bandwidth/cost) on both sides.
         const tickMs = (session.transport && session.transport.relay) ? 66 : 33;
+        this._lastTickAt = Date.now();
         this._coopTimer = setInterval(() => {
             try { session.tick(); } catch (e) { /* transport closed */ }
+            const now = Date.now();
+            // If the interval itself was throttled/frozen (hidden or locked tab), the
+            // gap since the last tick is many multiples of tickMs. Don't count that
+            // frozen wall-clock against the watchdog — re-baseline and judge the NEXT
+            // clean window. Without this a brief phone-lock self-"disconnects" on resume.
+            const gap = now - (this._lastTickAt || now);
+            this._lastTickAt = now;
+            if (gap > tickMs * 4) { this._lastRecvAt = now; return; }
             // Watchdog: no message from the peer for 4s => treat as disconnected.
-            if (this.state === 'playing' && Date.now() - this._lastRecvAt > 4000) this._coopDisconnected();
+            if (this.state === 'playing' && now - this._lastRecvAt > 4000) this._coopDisconnected();
         }, tickMs);
     }
 
@@ -2774,6 +2802,9 @@ closeStoryScreen() {
         this._coopLastSuperSelf = this._coopLastSuperPartner = false;
         this._coopLastBanner = '';
         this._coopBossSig = this._coopSuperSig = this._coopHudSig = this._coopBonusSig = '';
+        this._coopPartnerWasAlive = undefined;   // re-arm the "partner down" cue for the new game
+        this._partnerDownUntil = 0;
+        this._coopSnapPrevT = this._coopSnapLastT = 0;   // interpolation clock (reset per session)
         // Switch to the fixed shared arena (letterboxed) BEFORE placing ships, so
         // both devices lay out and exchange positions in identical coordinates.
         this.coopArenaActive = true;
@@ -2906,6 +2937,57 @@ closeStoryScreen() {
             b.pulsePhase += 0.2;
             if (b.trail && b.trail.length) { b.trail.forEach(t => t.life -= 0.05); b.trail = b.trail.filter(t => t.life > 0); }
         }
+        // Smooth the 15-30Hz snapshot stream into 60fps motion (this frame's positions).
+        this._coopInterpolate();
+    }
+
+    // Co-op: make a partner's death impossible to miss for the surviving player — a
+    // burst of FX at the spot plus a brief banner. The partner ship's health is
+    // host-simulated (host) or arrives via snapshot (guest), so the edge fires on both.
+    _checkCoopPartnerDeath() {
+        if (this.mode === 'solo') return;
+        const partner = this.coopRemoteShip;
+        const alive = !!(partner && partner.health > 0);
+        if (this._coopPartnerWasAlive === undefined) { this._coopPartnerWasAlive = alive; return; }
+        if (this._coopPartnerWasAlive && !alive) {
+            const x = partner ? partner.x : CONFIG.canvas.width / 2;
+            const y = partner ? partner.y : CONFIG.canvas.height / 2;
+            const col = (partner && partner.color) || '#FF7A3D';
+            this.createExplosion(x, y, 70, col);
+            this.createExplosion(x, y, 46, '#FFFFFF');
+            for (let i = 0; i < 3; i++) if (this.shockwaves.length < 6) this.shockwaves.push(new Shockwave(x, y, col));
+            this.screenShake.intensity = Math.max(this.screenShake.intensity, 0.6);
+            if (this.soundManager) this.soundManager.explosion(2);
+            if (this.vibrationManager && typeof this.vibrationManager.superWeapon === 'function') this.vibrationManager.superWeapon();
+            this._partnerDownUntil = this.currentTime + 2800;   // banner shown for ~2.8s (drawn in draw())
+        }
+        this._coopPartnerWasAlive = alive;
+    }
+
+    // Time-based (not entity-based) so it renders on the guest too, whose updateGame
+    // returns early and never advances floatingTexts.
+    _drawPartnerDownBanner() {
+        if (!this._partnerDownUntil) return;
+        const remaining = this._partnerDownUntil - this.currentTime;
+        if (remaining <= 0) { this._partnerDownUntil = 0; return; }
+        const ctx = this.ctx;
+        const w = CONFIG.canvas.width, cx = w / 2, y = CONFIG.canvas.height * 0.30;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, remaining / 400);   // fade out over the last 400ms
+        ctx.fillStyle = 'rgba(42, 6, 6, 0.86)';
+        ctx.fillRect(0, y - 33, w, 66);
+        ctx.strokeStyle = '#FF5544'; ctx.lineWidth = 2;
+        ctx.strokeRect(0, y - 33, w, 66);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.shadowBlur = 16; ctx.shadowColor = '#FF5544';
+        ctx.fillStyle = '#FF7766';
+        ctx.font = 'bold 21px Orbitron, monospace';
+        ctx.fillText('Ο ΣΥΜΠΑΙΚΤΗΣ ΕΠΕΣΕ', cx, y - 7);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#FFD9D2';
+        ctx.font = '600 12px "Exo 2", sans-serif';
+        ctx.fillText('Συνέχισε μόνος σου — κράτα γερά!', cx, y + 17);
+        ctx.restore();
     }
 
     coopGetLocalInput() {
@@ -2965,16 +3047,56 @@ closeStoryScreen() {
         arr.length = list.length;   // drop any extras (entities that died)
     }
 
+    // --- Guest interpolation (THE fix for the "guest feels laggy/stuttery" symptom) ---
+    // Snapshots arrive at 15-30Hz but we render at ~60fps. Snapping positions made the
+    // whole remote world step/judder. Instead we remember where each remote entity is
+    // rendered NOW (lerp start) and the freshest host position (target); _coopInterpolate
+    // eases between them every frame. A jump larger than one tick of plausible motion
+    // (recycled array slot, or a resync after a backgrounded tab) snaps to avoid a
+    // cross-entity slide. The guest's OWN ship never gets _interp (it's locally simulated).
+    _coopSetInterp(e, x, y) {
+        if (e._interp) {
+            const dx = x - e.x, dy = y - e.y;
+            if (dx * dx + dy * dy > 8100) { e.x = x; e.y = y; }   // >90px in one tick => snap
+        } else {
+            e.x = x; e.y = y;                                     // first sight: appear at target
+        }
+        e._isx = e.x; e._isy = e.y;   // lerp start = current rendered position
+        e._itx = x;   e._ity = y;     // lerp target = freshest host position
+        e._interp = true;
+    }
+
+    _coopInterpolate() {
+        const interval = Math.min(200, Math.max(16, (this._coopSnapLastT - this._coopSnapPrevT) || 66));
+        const alpha = Math.max(0, Math.min(1, (Date.now() - this._coopSnapLastT) / interval));
+        const lerp = (e) => {
+            if (!e || !e._interp) return;
+            e.x = e._isx + (e._itx - e._isx) * alpha;
+            e.y = e._isy + (e._ity - e._isy) * alpha;
+        };
+        for (const e of this.enemies) lerp(e);
+        for (const b of this.bullets) lerp(b);
+        for (const h of this.homingBullets) lerp(h);
+        for (const p of this.bonusPickups) lerp(p);
+        lerp(this.boss);
+        lerp(this.coopRemoteShip);    // own ship has no _interp -> untouched
+    }
+
     coopApplySnapshot(msg) {
         if (!msg) return;
-        this._lastRecvAt = Date.now();
+        const _snapNow = Date.now();
+        this._lastRecvAt = _snapNow;
+        // Snapshot arrival times drive the interpolation alpha in _coopInterpolate
+        // (renders the 15-30Hz stream as smooth 60fps motion).
+        this._coopSnapPrevT = this._coopSnapLastT || _snapNow;
+        this._coopSnapLastT = _snapNow;
         // Array.isArray (not `|| []`): a garbled/hostile non-array with a numeric
         // `length` would otherwise drive _coopReconcile into character-by-character
         // iteration and feed primitives into the entity factories.
         this._coopReconcile(this.enemies, Array.isArray(msg.enemies) ? msg.enemies : [],
             (e, d) => e.typeName !== d.type,
             d => new Enemy(d.x, d.y, d.type),
-            (e, d) => { e.x = d.x; e.y = d.y; e.health = d.hp; });
+            (e, d) => { this._coopSetInterp(e, d.x, d.y); e.health = d.hp; });
         this._coopReconcile(this.bullets, Array.isArray(msg.bullets) ? msg.bullets : [],
             (b, d) => b.isPlayerBullet !== d.p || b.enemyType !== d.et,
             d => new Bullet(d.x, d.y, 0, 0, d.color, d.p, d.et),
@@ -2982,19 +3104,19 @@ closeStoryScreen() {
                 // Drop a motion-trail crumb at the old position when an enemy
                 // projectile moves (the guest never runs Bullet.update()).
                 if (!d.p && (b.x !== d.x || b.y !== d.y)) { b.trail.push({ x: b.x, y: b.y, life: 1 }); if (b.trail.length > 8) b.trail.shift(); }
-                b.x = d.x; b.y = d.y; b.color = d.color;
+                this._coopSetInterp(b, d.x, d.y); b.color = d.color;
             });
         this._coopReconcile(this.homingBullets, Array.isArray(msg.homing) ? msg.homing : [],
             () => false,
             d => new HomingBullet(d.x, d.y, d.x, d.y),
-            (h, d) => { h.x = d.x; h.y = d.y; });
+            (h, d) => { this._coopSetInterp(h, d.x, d.y); });
         this._coopReconcile(this.bonusPickups, Array.isArray(msg.pickups) ? msg.pickups : [],
             (p, d) => p.type !== d.type,
             d => new BonusPickup(d.x, d.y, d.type),
-            (p, d) => { p.x = d.x; p.y = d.y; });
+            (p, d) => { this._coopSetInterp(p, d.x, d.y); });
         if (msg.boss) {
             if (!this.boss) { this.boss = new Boss(CONFIG.canvas.width, CONFIG.canvas.height, 10); this.boss.entranceComplete = true; }
-            const bo = this.boss; bo.x = msg.boss.x; bo.y = msg.boss.y; bo.health = msg.boss.hp; bo.maxHealth = msg.boss.maxHp; bo.size = msg.boss.size;
+            const bo = this.boss; this._coopSetInterp(bo, msg.boss.x, msg.boss.y); bo.health = msg.boss.hp; bo.maxHealth = msg.boss.maxHp; bo.size = msg.boss.size;
             if (msg.boss.name) bo.name = msg.boss.name;
             if (typeof msg.boss.phase === 'number') bo.phase = msg.boss.phase;
             if (typeof msg.boss.design === 'number') bo.designIndex = msg.boss.design;   // draw the correct boss shape
@@ -3015,8 +3137,8 @@ closeStoryScreen() {
             ship.bonuses = {};
             if (s.bonuses) for (const [k, rem] of Object.entries(s.bonuses)) ship.bonuses[k] = { startTime: nowB, duration: rem };
             if (s.i !== localIdx && Number.isFinite(s.x) && Number.isFinite(s.y)) {
-                ship.x = Math.max(0, Math.min(CONFIG.canvas.width, s.x));   // remote ship pos from host (clamped); own ship stays local
-                ship.y = Math.max(0, Math.min(CONFIG.canvas.height, s.y));
+                // remote ship pos from host (clamped), interpolated; own ship stays local
+                this._coopSetInterp(ship, Math.max(0, Math.min(CONFIG.canvas.width, s.x)), Math.max(0, Math.min(CONFIG.canvas.height, s.y)));
             }
         });
 
