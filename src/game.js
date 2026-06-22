@@ -623,11 +623,11 @@ export class Game {
                 this._syncMusicIcon();
                 // Co-op: a hidden tab freezes our timer/rAF, so _lastRecvAt is stale on
                 // return — give a fresh grace window so the 4s watchdog doesn't instantly
-                // false-"disconnect", and re-baseline interpolation timing.
+                // false-"disconnect".
                 if (this.mode !== 'solo') {
                     const t = Date.now();
                     this._lastRecvAt = t; this._lastTickAt = t;
-                    this._coopSnapPrevT = this._coopSnapLastT = t;
+                    this._coopAcquireWakeLock();   // wake lock auto-releases when hidden — re-take it
                 }
             }
         });
@@ -1246,6 +1246,7 @@ export class Game {
         // screen (Firebase bandwidth/quota on the relay path).
         try { if (this.coopSession) this.coopSession.tick(); } catch (e) {}
         if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
+        this._coopReleaseWakeLock();
     }
     if (this.boss) {
         this.boss = null;
@@ -2479,7 +2480,47 @@ escapeHtml(text) {
         // Co-op: "partner down" banner on top of everything
         if (this.state === 'playing' && this.mode !== 'solo') this._drawPartnerDownBanner();
 
+        // Co-op netcode diagnostic overlay (opt-in via ?coopdebug=1)
+        if (this._coopDebug && this.mode !== 'solo') this._drawCoopDebug();
+
         this.ctx.restore();
+    }
+
+    // On-canvas co-op netcode diagnostic (?coopdebug=1). Lets a real 2-device
+    // playtest distinguish the candidate causes of the "guest κόλλημα": a frozen
+    // host pump (TX/s drops, host visibilityState != 'visible'), a silent 15Hz
+    // relay (WIRE shows RTDB), or genuine snapshot-gap bursts (max-gap / >250ms count).
+    _drawCoopDebug() {
+        const ctx = this.ctx;
+        const now = Date.now();
+        if (now - (this._coopTpsT || now) >= 1000) { this._coopTps = this._coopTicksSent; this._coopTicksSent = 0; this._coopTpsT = now; }
+        const t = this.coopSession && this.coopSession.transport;
+        const wire = t ? (t.relay ? 'RTDB 15Hz' : 'WebRTC 30Hz') : '—';
+        const times = this._coopRecvTimes || [];
+        let maxGap = 0, bigGaps = 0;
+        for (let i = 1; i < times.length; i++) { const g = times[i] - times[i - 1]; if (g > maxGap) maxGap = g; if (g > 250) bigGaps++; }
+        const stale = this._lastRecvAt ? (now - this._lastRecvAt) : 0;
+        const isGuest = this.mode === 'coopGuest';
+        const lines = [
+            `WIRE ${wire}   TX/s ${this._coopTps || 0}`,
+            `vis ${document.visibilityState}  wakelock ${this._wakeLock ? 'ON' : 'off'}`,
+        ];
+        if (isGuest) {
+            lines.push(`snap gap  last ${this._coopLastGap || 0}ms`);
+            lines.push(`max5s ${maxGap}ms  >250ms ${bigGaps}`);
+            lines.push(`stale ${stale}ms`);
+        }
+        ctx.save();
+        ctx.font = '11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        const pad = 5, lh = 14, boxW = 176, boxH = pad * 2 + lines.length * lh;
+        ctx.fillStyle = 'rgba(0,0,0,0.62)';
+        ctx.fillRect(4, 4, boxW, boxH);
+        for (let i = 0; i < lines.length; i++) {
+            ctx.fillStyle = '#7CFC00';
+            if (isGuest && i === lines.length - 1 && stale > 200) ctx.fillStyle = '#FF5544';   // staleness alarm
+            ctx.fillText(lines[i], 4 + pad, 4 + pad + i * lh);
+        }
+        ctx.restore();
     }
 
     spawnBossDrops(x, y) {
@@ -2719,6 +2760,16 @@ closeStoryScreen() {
         this.coopCode = code;
         this.coopDifficulty = difficulty;
         this.coopNames = names || 'Co-op';
+        // Transport observability: which wire actually won the connectCoop race? This
+        // is otherwise invisible — a silent fallback to the 15Hz RTDB relay (vs 30Hz
+        // WebRTC P2P) is a prime suspect for the "guest feels laggy". Add ?coopdebug=1
+        // to the URL for an on-canvas overlay with live transport + snapshot-gap stats.
+        const wire = (session.transport && session.transport.relay) ? 'RTDB relay (~15Hz)' : 'WebRTC P2P (~30Hz)';
+        try { console.log(`[coop] connected as ${role} over ${wire}`); } catch (e) {}
+        this._coopDebug = /[?&]coopdebug=1\b/.test(location.search);
+        this._coopRecvTimes = [];    // guest: snapshot arrival times (rolling 5s window)
+        this._coopLastGap = 0;
+        this._coopTicksSent = 0; this._coopTps = 0; this._coopTpsT = Date.now();
         this.startCoopGame(role, difficulty);
         this._lastRecvAt = Date.now();
         this._coopEnded = false;
@@ -2733,7 +2784,7 @@ closeStoryScreen() {
         const tickMs = (session.transport && session.transport.relay) ? 66 : 33;
         this._lastTickAt = Date.now();
         this._coopTimer = setInterval(() => {
-            try { session.tick(); } catch (e) { /* transport closed */ }
+            try { session.tick(); if (this._coopDebug) this._coopTicksSent++; } catch (e) { /* transport closed */ }
             const now = Date.now();
             // If the interval itself was throttled/frozen (hidden or locked tab), the
             // gap since the last tick is many multiples of tickMs. Don't count that
@@ -2745,6 +2796,25 @@ closeStoryScreen() {
             // Watchdog: no message from the peer for 4s => treat as disconnected.
             if (this.state === 'playing' && now - this._lastRecvAt > 4000) this._coopDisconnected();
         }, tickMs);
+        // Keep the screen awake during co-op. Without this, when a player's phone dims
+        // or locks the browser throttles/freezes our setInterval AND rAF to ~1Hz: the
+        // HOST stops broadcasting snapshots (the guest freezes, then snaps on resume),
+        // and a guest screen-dim freezes its render. This is the #1 cause of the
+        // "guest κόλλημα". The lock auto-releases when hidden -> re-acquired on resume.
+        this._coopAcquireWakeLock();
+    }
+
+    async _coopAcquireWakeLock() {
+        try {
+            if (!('wakeLock' in navigator) || this._wakeLock) return;
+            this._wakeLock = await navigator.wakeLock.request('screen');
+            this._wakeLock.addEventListener('release', () => { this._wakeLock = null; });
+        } catch (e) { /* unsupported / denied / not visible — harmless, co-op still runs */ }
+    }
+
+    _coopReleaseWakeLock() {
+        try { if (this._wakeLock) this._wakeLock.release(); } catch (e) {}
+        this._wakeLock = null;
     }
 
     _coopDisconnected() {
@@ -2753,6 +2823,7 @@ closeStoryScreen() {
         const wasHost = this.mode === 'coopHost';
         if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
         if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
+        this._coopReleaseWakeLock();
         if (wasHost) {
             // Partner left — keep playing solo with the host ship (stay in the
             // arena to avoid a jarring mid-game resize; logic switches to solo).
@@ -2804,7 +2875,6 @@ closeStoryScreen() {
         this._coopBossSig = this._coopSuperSig = this._coopHudSig = this._coopBonusSig = '';
         this._coopPartnerWasAlive = undefined;   // re-arm the "partner down" cue for the new game
         this._partnerDownUntil = 0;
-        this._coopSnapPrevT = this._coopSnapLastT = 0;   // interpolation clock (reset per session)
         // Switch to the fixed shared arena (letterboxed) BEFORE placing ships, so
         // both devices lay out and exchange positions in identical coordinates.
         this.coopArenaActive = true;
@@ -2839,6 +2909,7 @@ closeStoryScreen() {
         this._coopEnded = true;
         if (this._coopTimer) { clearInterval(this._coopTimer); this._coopTimer = null; }
         if (this.coopSession) { try { this.coopSession.stop(); } catch (e) {} this.coopSession = null; }
+        this._coopReleaseWakeLock();
         // Remove our RTDB footprint (host: whole room, guest: its seat) so finished
         // online rooms don't accumulate in Firebase forever. No-op if not in a room.
         if (this.coopLobby) this.coopLobby.cleanupRoom();
@@ -2937,8 +3008,6 @@ closeStoryScreen() {
             b.pulsePhase += 0.2;
             if (b.trail && b.trail.length) { b.trail.forEach(t => t.life -= 0.05); b.trail = b.trail.filter(t => t.life > 0); }
         }
-        // Smooth the 15-30Hz snapshot stream into 60fps motion (this frame's positions).
-        this._coopInterpolate();
     }
 
     // Co-op: make a partner's death impossible to miss for the surviving player — a
@@ -3047,56 +3116,22 @@ closeStoryScreen() {
         arr.length = list.length;   // drop any extras (entities that died)
     }
 
-    // --- Guest interpolation (THE fix for the "guest feels laggy/stuttery" symptom) ---
-    // Snapshots arrive at 15-30Hz but we render at ~60fps. Snapping positions made the
-    // whole remote world step/judder. Instead we remember where each remote entity is
-    // rendered NOW (lerp start) and the freshest host position (target); _coopInterpolate
-    // eases between them every frame. A jump larger than one tick of plausible motion
-    // (recycled array slot, or a resync after a backgrounded tab) snaps to avoid a
-    // cross-entity slide. The guest's OWN ship never gets _interp (it's locally simulated).
-    _coopSetInterp(e, x, y) {
-        if (e._interp) {
-            const dx = x - e.x, dy = y - e.y;
-            if (dx * dx + dy * dy > 8100) { e.x = x; e.y = y; }   // >90px in one tick => snap
-        } else {
-            e.x = x; e.y = y;                                     // first sight: appear at target
-        }
-        e._isx = e.x; e._isy = e.y;   // lerp start = current rendered position
-        e._itx = x;   e._ity = y;     // lerp target = freshest host position
-        e._interp = true;
-    }
-
-    _coopInterpolate() {
-        const interval = Math.min(200, Math.max(16, (this._coopSnapLastT - this._coopSnapPrevT) || 66));
-        const alpha = Math.max(0, Math.min(1, (Date.now() - this._coopSnapLastT) / interval));
-        const lerp = (e) => {
-            if (!e || !e._interp) return;
-            e.x = e._isx + (e._itx - e._isx) * alpha;
-            e.y = e._isy + (e._ity - e._isy) * alpha;
-        };
-        for (const e of this.enemies) lerp(e);
-        for (const b of this.bullets) lerp(b);
-        for (const h of this.homingBullets) lerp(h);
-        for (const p of this.bonusPickups) lerp(p);
-        lerp(this.boss);
-        lerp(this.coopRemoteShip);    // own ship has no _interp -> untouched
-    }
-
     coopApplySnapshot(msg) {
         if (!msg) return;
-        const _snapNow = Date.now();
-        this._lastRecvAt = _snapNow;
-        // Snapshot arrival times drive the interpolation alpha in _coopInterpolate
-        // (renders the 15-30Hz stream as smooth 60fps motion).
-        this._coopSnapPrevT = this._coopSnapLastT || _snapNow;
-        this._coopSnapLastT = _snapNow;
+        const _now = Date.now();
+        if (this._coopDebug) {
+            this._coopLastGap = this._lastRecvAt ? (_now - this._lastRecvAt) : 0;
+            this._coopRecvTimes.push(_now);
+            while (this._coopRecvTimes.length && _now - this._coopRecvTimes[0] > 5000) this._coopRecvTimes.shift();
+        }
+        this._lastRecvAt = _now;
         // Array.isArray (not `|| []`): a garbled/hostile non-array with a numeric
         // `length` would otherwise drive _coopReconcile into character-by-character
         // iteration and feed primitives into the entity factories.
         this._coopReconcile(this.enemies, Array.isArray(msg.enemies) ? msg.enemies : [],
             (e, d) => e.typeName !== d.type,
             d => new Enemy(d.x, d.y, d.type),
-            (e, d) => { this._coopSetInterp(e, d.x, d.y); e.health = d.hp; });
+            (e, d) => { e.x = d.x; e.y = d.y; e.health = d.hp; });
         this._coopReconcile(this.bullets, Array.isArray(msg.bullets) ? msg.bullets : [],
             (b, d) => b.isPlayerBullet !== d.p || b.enemyType !== d.et,
             d => new Bullet(d.x, d.y, 0, 0, d.color, d.p, d.et),
@@ -3104,19 +3139,19 @@ closeStoryScreen() {
                 // Drop a motion-trail crumb at the old position when an enemy
                 // projectile moves (the guest never runs Bullet.update()).
                 if (!d.p && (b.x !== d.x || b.y !== d.y)) { b.trail.push({ x: b.x, y: b.y, life: 1 }); if (b.trail.length > 8) b.trail.shift(); }
-                this._coopSetInterp(b, d.x, d.y); b.color = d.color;
+                b.x = d.x; b.y = d.y; b.color = d.color;
             });
         this._coopReconcile(this.homingBullets, Array.isArray(msg.homing) ? msg.homing : [],
             () => false,
             d => new HomingBullet(d.x, d.y, d.x, d.y),
-            (h, d) => { this._coopSetInterp(h, d.x, d.y); });
+            (h, d) => { h.x = d.x; h.y = d.y; });
         this._coopReconcile(this.bonusPickups, Array.isArray(msg.pickups) ? msg.pickups : [],
             (p, d) => p.type !== d.type,
             d => new BonusPickup(d.x, d.y, d.type),
-            (p, d) => { this._coopSetInterp(p, d.x, d.y); });
+            (p, d) => { p.x = d.x; p.y = d.y; });
         if (msg.boss) {
             if (!this.boss) { this.boss = new Boss(CONFIG.canvas.width, CONFIG.canvas.height, 10); this.boss.entranceComplete = true; }
-            const bo = this.boss; this._coopSetInterp(bo, msg.boss.x, msg.boss.y); bo.health = msg.boss.hp; bo.maxHealth = msg.boss.maxHp; bo.size = msg.boss.size;
+            const bo = this.boss; bo.x = msg.boss.x; bo.y = msg.boss.y; bo.health = msg.boss.hp; bo.maxHealth = msg.boss.maxHp; bo.size = msg.boss.size;
             if (msg.boss.name) bo.name = msg.boss.name;
             if (typeof msg.boss.phase === 'number') bo.phase = msg.boss.phase;
             if (typeof msg.boss.design === 'number') bo.designIndex = msg.boss.design;   // draw the correct boss shape
@@ -3137,8 +3172,9 @@ closeStoryScreen() {
             ship.bonuses = {};
             if (s.bonuses) for (const [k, rem] of Object.entries(s.bonuses)) ship.bonuses[k] = { startTime: nowB, duration: rem };
             if (s.i !== localIdx && Number.isFinite(s.x) && Number.isFinite(s.y)) {
-                // remote ship pos from host (clamped), interpolated; own ship stays local
-                this._coopSetInterp(ship, Math.max(0, Math.min(CONFIG.canvas.width, s.x)), Math.max(0, Math.min(CONFIG.canvas.height, s.y)));
+                // remote ship pos from host (clamped); own ship stays local
+                ship.x = Math.max(0, Math.min(CONFIG.canvas.width, s.x));
+                ship.y = Math.max(0, Math.min(CONFIG.canvas.height, s.y));
             }
         });
 

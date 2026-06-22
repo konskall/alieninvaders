@@ -35,7 +35,12 @@ export class WebRtcTransport extends BaseTransport {
     this._subs.push([iceRef, 'child_added', iceCb]);
 
     if (this.role === 'host') {
-      this.dc = this.pc.createDataChannel('game');   // reliable, ordered
+      // Unordered (still reliable): snapshots are full-state + idempotent and the
+      // guest drops stale seq (NetcodeGuest), so ordering buys nothing and only adds
+      // SCTP head-of-line blocking — a late chunk would otherwise stall newer ones.
+      // Reliability is kept (no maxRetransmits) so the one-shot guest 'super' inside
+      // INPUT is never lost; it can only arrive ~1 tick out of order, which self-heals.
+      this.dc = this.pc.createDataChannel('game', { ordered: false });
       this._wireChannel(this.dc);
       const offer = await this.pc.createOffer();
       await this.pc.setLocalDescription(offer);
